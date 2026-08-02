@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+import subprocess
+import os
+import sys
+
+WOFI_CSS = os.path.expanduser("~/.config/wofi/wifi.css")
+
+def run_cmd(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+def notify(title, msg):
+    run_cmd(["notify-send", "-a", "Power Profile", title, msg])
+
+def get_current_profile():
+    res = run_cmd(["powerprofilesctl", "get"])
+    return res.stdout.strip()
+
+def get_battery_summary():
+    try:
+        res = run_cmd(["upower", "-i", "/org/freedesktop/UPower/devices/battery_BAT1"])
+        lines = res.stdout.splitlines()
+        pct = ""
+        state = ""
+        for line in lines:
+            if "percentage:" in line:
+                pct = line.split(":", 1)[1].strip()
+            elif "state:" in line:
+                state = line.split(":", 1)[1].strip()
+        if pct and state:
+            return f"{pct} ({state.capitalize()})"
+        elif pct:
+            return pct
+    except Exception:
+        pass
+    return "Battery"
+
+def main():
+    current_profile = get_current_profile()
+    bat_summary = get_battery_summary()
+
+    perf_mark = "  ● Active" if current_profile == "performance" else ""
+    bal_mark = "  ● Active" if current_profile == "balanced" else ""
+    saver_mark = "  ● Active" if current_profile == "power-saver" else ""
+
+    menu_lines = [
+        f"⚡  Performance Mode{perf_mark}",
+        f"⚖️   Balanced Mode{bal_mark}",
+        f"🔋  Power Saver Mode{saver_mark}",
+        "──────────────",
+        "📊  Battery Details & Info"
+    ]
+
+    cmd = [
+        "wofi",
+        "--dmenu",
+        "--hide-search",
+        "--prompt", f"Power Mode [{bat_summary}]",
+        "--style", WOFI_CSS,
+        "--width", "340",
+        "--height", "210",
+        "--cache-file", "/dev/null"
+    ]
+
+    input_str = "\n".join(menu_lines)
+    res = subprocess.run(cmd, input=input_str, capture_output=True, text=True)
+    selected = res.stdout.strip()
+
+    if not selected or selected == "──────────────":
+        return
+
+    if "Performance" in selected:
+        run_cmd(["powerprofilesctl", "set", "performance"])
+        notify("⚡ Power Profile Changed", "Switched to Performance Mode")
+    elif "Balanced" in selected:
+        run_cmd(["powerprofilesctl", "set", "balanced"])
+        notify("⚖️ Power Profile Changed", "Switched to Balanced Mode")
+    elif "Power Saver" in selected:
+        run_cmd(["powerprofilesctl", "set", "power-saver"])
+        notify("🔋 Power Profile Changed", "Switched to Power Saver Mode")
+    elif "Battery Details" in selected:
+        run_cmd(["/home/zaki/.local/bin/battery-info"])
+
+if __name__ == "__main__":
+    main()

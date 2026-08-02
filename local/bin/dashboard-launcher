@@ -746,6 +746,7 @@ class DashboardLauncher(Gtk.Window):
 
         self.connect("draw", self.on_draw)
         self.connect("key-press-event", self.on_key_press)
+        self.connect("destroy", Gtk.main_quit)
 
         main_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.add(main_hbox)
@@ -1241,6 +1242,7 @@ class DashboardLauncher(Gtk.Window):
 
     def close_launcher(self):
         self.destroy()
+        Gtk.main_quit()
 
     def on_key_press(self, widget, event):
         if event.keyval == Gdk.KEY_Escape:
@@ -1657,6 +1659,20 @@ def crop_rounded_pixbuf(pixbuf, size=120, radius=16):
     return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
 
 def main():
+    current_pid = os.getpid()
+    try:
+        res = subprocess.run(["pgrep", "-f", "dashboard-launcher"], capture_output=True, text=True)
+        if res.returncode == 0:
+            for pid_str in res.stdout.strip().split():
+                try:
+                    pid = int(pid_str)
+                    if pid != current_pid:
+                        os.kill(pid, 9)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     css_provider = Gtk.CssProvider()
     css_provider.load_from_data(CSS)
     Gtk.StyleContext.add_provider_for_screen(

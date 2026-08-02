@@ -5,6 +5,7 @@ import glob
 import subprocess
 import threading
 import time
+import hashlib
 import cairo
 
 import gi
@@ -33,7 +34,9 @@ window.picker-window {
 
 .main-container {
     background-color: rgba(15, 17, 26, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(255, 255, 255, 0.15);
     border-radius: 20px;
     padding: 20px;
 }
@@ -51,10 +54,21 @@ window.picker-window {
     margin-top: 2px;
 }
 
+.status-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #33ccff;
+    background-color: rgba(51, 204, 255, 0.15);
+    border-radius: 8px;
+    padding: 4px 10px;
+}
+
 button.card-button {
     background-color: rgba(255, 255, 255, 0.05);
     background-image: none;
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(255, 255, 255, 0.10);
     border-radius: 16px;
     padding: 8px;
     margin: 4px;
@@ -71,7 +85,38 @@ button.card-button:hover, button.card-button:focus {
     font-size: 11px;
     font-weight: 600;
     color: #dddddd;
-    margin-top: 6px;
+}
+
+.badge-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+
+.badge-video {
+    background-color: rgba(255, 0, 110, 0.25);
+    color: #ff3388;
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(255, 0, 110, 0.6);
+}
+
+.badge-gif {
+    background-color: rgba(255, 170, 0, 0.25);
+    color: #ffaa00;
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(255, 170, 0, 0.6);
+}
+
+.badge-image {
+    background-color: rgba(0, 204, 255, 0.2);
+    color: #33ccff;
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(0, 204, 255, 0.4);
 }
 
 button.card-button:hover .card-label, button.card-button:focus .card-label {
@@ -79,9 +124,11 @@ button.card-button:hover .card-label, button.card-button:focus .card-label {
     font-weight: 700;
 }
 
-.active-card {
-    border: 2px solid #00ff99 !important;
-    background-color: rgba(0, 255, 153, 0.12) !important;
+button.card-button.active-card {
+    border-width: 2px;
+    border-style: solid;
+    border-color: #00ff99;
+    background-color: rgba(0, 255, 153, 0.12);
 }
 
 .empty-label {
@@ -91,15 +138,30 @@ button.card-button:hover .card-label, button.card-button:focus .card-label {
 }
 """
 
+VIDEO_EXTS = ('.mp4', '.webm', '.mkv', '.mov', '.avi')
+GIF_EXTS = ('.gif',)
+
 class WallpaperPicker(Gtk.Window):
     def __init__(self):
         super().__init__(title="Wallpaper Selector")
         self.set_name("picker-window")
-        self.set_wmclass("wallpaper_picker", "wallpaper_picker")
+        try:
+            self.set_wmclass("wallpaper_picker", "wallpaper_picker")
+        except Exception:
+            pass
 
         self.set_default_size(860, 560)
         self.set_resizable(True)
         self.set_decorated(False)
+
+        # Apply CSS
+        style_provider = Gtk.CssProvider()
+        style_provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            style_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
         # Enable ARGB Canvas
         self.set_app_paintable(True)
@@ -120,17 +182,23 @@ class WallpaperPicker(Gtk.Window):
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         header_title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
 
-        lbl_title = Gtk.Label(label="🖼️ Wallpaper Selector")
+        lbl_title = Gtk.Label(label="Wallpaper Selector")
         lbl_title.set_halign(Gtk.Align.START)
         lbl_title.get_style_context().add_class("header-title")
 
-        lbl_sub = Gtk.Label(label="Select a wallpaper from ~/Pictures/wallpaper")
+        lbl_sub = Gtk.Label(label="Select image, GIF, or MP4 wallpaper from ~/Pictures/wallpaper")
         lbl_sub.set_halign(Gtk.Align.START)
         lbl_sub.get_style_context().add_class("header-sub")
 
         header_title_vbox.pack_start(lbl_title, False, False, 0)
         header_title_vbox.pack_start(lbl_sub, False, False, 0)
         header_box.pack_start(header_title_vbox, True, True, 0)
+
+        # Status Label (for video processing)
+        self.lbl_status = Gtk.Label(label="")
+        self.lbl_status.get_style_context().add_class("status-label")
+        self.lbl_status.set_no_show_all(True)
+        header_box.pack_start(self.lbl_status, False, False, 10)
 
         # Close button
         btn_close = Gtk.Button(label="✕")
@@ -159,7 +227,7 @@ class WallpaperPicker(Gtk.Window):
         self.selected_idx = 0
 
         if not self.wallpapers:
-            lbl_empty = Gtk.Label(label="No wallpapers found in ~/Pictures/wallpaper!\nPlease add images (.jpg, .png, .webp) to ~/Pictures/wallpaper")
+            lbl_empty = Gtk.Label(label="No wallpapers found in ~/Pictures/wallpaper!\nPlease add images (.jpg, .png, .webp), GIFs (.gif), or videos (.mp4) to ~/Pictures/wallpaper")
             lbl_empty.get_style_context().add_class("empty-label")
             self.grid.attach(lbl_empty, 0, 0, 1, 1)
         else:
@@ -170,13 +238,13 @@ class WallpaperPicker(Gtk.Window):
         if not os.path.exists(wall_dir):
             os.makedirs(wall_dir, exist_ok=True)
 
-        valid_exts = ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp")
+        valid_exts = ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.mp4", "*.webm", "*.mkv", "*.mov")
         files = []
         for ext in valid_exts:
             files.extend(glob.glob(os.path.join(wall_dir, ext)))
             files.extend(glob.glob(os.path.join(wall_dir, ext.upper())))
 
-        # Sort by modification time (newest first)
+        files = list(set(files))
         files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
         return files
 
@@ -203,20 +271,37 @@ class WallpaperPicker(Gtk.Window):
 
             card_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
-            # Thumbnail Image Placeholder
             img = Gtk.Image()
             img.set_size_request(230, 130)
             card_vbox.pack_start(img, False, False, 0)
 
-            # Filename Label
+            info_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            
+            ext = os.path.splitext(filepath)[1].lower()
+            badge = Gtk.Label()
+            badge.get_style_context().add_class("badge-label")
+            if ext in VIDEO_EXTS:
+                badge.set_text("VIDEO")
+                badge.get_style_context().add_class("badge-video")
+            elif ext in GIF_EXTS:
+                badge.set_text("GIF")
+                badge.get_style_context().add_class("badge-gif")
+            else:
+                badge.set_text("IMG")
+                badge.get_style_context().add_class("badge-image")
+            
+            info_hbox.pack_start(badge, False, False, 0)
+
             fname = os.path.basename(filepath)
             lbl = Gtk.Label(label=fname)
             lbl.set_ellipsize(3)
             lbl.get_style_context().add_class("card-label")
-            card_vbox.pack_start(lbl, False, False, 0)
+            info_hbox.pack_start(lbl, True, True, 0)
+
+            card_vbox.pack_start(info_hbox, False, False, 0)
 
             btn.add(card_vbox)
-            btn.connect("clicked", lambda b, p=filepath: self.apply_wallpaper(p))
+            btn.connect("clicked", lambda b, p=filepath: self.on_card_clicked(p))
 
             self.grid.attach(btn, col, row, 1, 1)
             self.cards.append((btn, filepath))
@@ -228,19 +313,85 @@ class WallpaperPicker(Gtk.Window):
         if self.cards:
             self.cards[self.selected_idx][0].grab_focus()
 
+    def get_file_hash(self, filepath):
+        mtime = os.path.getmtime(filepath)
+        return hashlib.md5(f"{filepath}_{mtime}".encode('utf-8')).hexdigest()
+
     def load_thumbnail(self, img_widget, filepath):
         try:
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(filepath, 230, 130, True)
+            ext = os.path.splitext(filepath)[1].lower()
+            thumb_path = filepath
+            if ext in VIDEO_EXTS:
+                thumb_dir = os.path.expanduser("~/.cache/wallpaper_thumbs")
+                os.makedirs(thumb_dir, exist_ok=True)
+                file_hash = self.get_file_hash(filepath)
+                cache_thumb = os.path.join(thumb_dir, f"{file_hash}.jpg")
+                
+                if not os.path.exists(cache_thumb):
+                    try:
+                        cmd = [
+                            "ffmpeg", "-y", "-ss", "00:00:01", "-i", filepath,
+                            "-vframes", "1", "-vf", "scale=460:260:force_original_aspect_ratio=decrease",
+                            cache_thumb
+                        ]
+                        subprocess.run(cmd, capture_output=True, check=True)
+                    except Exception:
+                        try:
+                            cmd = [
+                                "ffmpeg", "-y", "-ss", "00:00:00", "-i", filepath,
+                                "-vframes", "1", "-vf", "scale=460:260:force_original_aspect_ratio=decrease",
+                                cache_thumb
+                            ]
+                            subprocess.run(cmd, capture_output=True, check=True)
+                        except Exception:
+                            pass
+                if os.path.exists(cache_thumb):
+                    thumb_path = cache_thumb
+
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(thumb_path, 230, 130, True)
             GLib.idle_add(img_widget.set_from_pixbuf, pixbuf)
         except Exception:
             pass
 
-    def apply_wallpaper(self, filepath):
-        # Save current wallpaper path
+    def on_card_clicked(self, filepath):
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext in VIDEO_EXTS:
+            has_mpvpaper = subprocess.run(["which", "mpvpaper"], capture_output=True).returncode == 0
+            if has_mpvpaper:
+                self.apply_wallpaper(filepath)
+            else:
+                self.lbl_status.set_text("Processing video wallpaper...")
+                self.lbl_status.show()
+                threading.Thread(target=self.process_and_apply_video, args=(filepath,), daemon=True).start()
+        else:
+            self.apply_wallpaper(filepath)
+
+    def process_and_apply_video(self, filepath):
+        try:
+            conv_dir = os.path.expanduser("~/.cache/wallpaper_converted")
+            os.makedirs(conv_dir, exist_ok=True)
+            file_hash = self.get_file_hash(filepath)
+            conv_path = os.path.join(conv_dir, f"{file_hash}.webp")
+
+            if not os.path.exists(conv_path):
+                cmd = [
+                    "ffmpeg", "-y", "-ss", "0", "-t", "8", "-i", filepath,
+                    "-vf", "fps=20,scale=1920:-2",
+                    "-compression_level", "1", "-q:v", "80",
+                    "-loop", "0", conv_path
+                ]
+                subprocess.run(cmd, capture_output=True, check=True)
+
+            GLib.idle_add(self.apply_wallpaper, filepath, conv_path)
+        except Exception as e:
+            print(f"Error processing video: {e}")
+            GLib.idle_add(self.apply_wallpaper, filepath, filepath)
+
+    def apply_wallpaper(self, original_filepath, actual_path_to_render=None):
         cache_file = os.path.expanduser("~/.cache/current_wallpaper")
         try:
             with open(cache_file, "w") as f:
-                f.write(filepath)
+                f.write(original_filepath)
         except Exception:
             pass
 
@@ -259,10 +410,30 @@ class WallpaperPicker(Gtk.Window):
         if "XDG_RUNTIME_DIR" not in env:
             env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
 
+        ext = os.path.splitext(original_filepath)[1].lower()
+
+        # Native MP4 Video playback via mpvpaper (if installed)
+        if ext in VIDEO_EXTS:
+            has_mpvpaper = subprocess.run(["which", "mpvpaper"], capture_output=True).returncode == 0
+            if has_mpvpaper:
+                # Stop existing mpvpaper instances
+                subprocess.run(["pkill", "-x", "mpvpaper"], env=env)
+                time.sleep(0.1)
+                # Launch mpvpaper in native 4K 60FPS mode
+                cmd_mpvpaper = [
+                    "mpvpaper", "-o", "no-audio loop-file=inf --hwdec=auto",
+                    "*", original_filepath
+                ]
+                subprocess.Popen(cmd_mpvpaper, env=env)
+                self.destroy()
+                return
+
+        # For images / GIFs or fallback if mpvpaper not installed:
+        subprocess.run(["pkill", "-x", "mpvpaper"], env=env)
+
         wayland_disp = env["WAYLAND_DISPLAY"]
         sock_path = f"/run/user/{os.getuid()}/{wayland_disp}-awww-daemon.sock"
 
-        # Check if awww-daemon is running, if not clean stale socket and start daemon
         res = subprocess.run(["pgrep", "-x", "awww-daemon"], capture_output=True, env=env)
         if res.returncode != 0:
             if os.path.exists(sock_path):
@@ -273,15 +444,14 @@ class WallpaperPicker(Gtk.Window):
             subprocess.Popen(["/usr/bin/awww-daemon"], env=env)
             time.sleep(0.3)
 
-        # Wait up to 2 seconds for awww-daemon socket to be ready
         for _ in range(20):
             if os.path.exists(sock_path):
                 break
             time.sleep(0.1)
 
-        # Circle expansion transition from center outward ('grow' / 'center')
+        target_file = actual_path_to_render if actual_path_to_render else original_filepath
         cmd_awww = [
-            "/usr/bin/awww", "img", filepath,
+            "/usr/bin/awww", "img", target_file,
             "--transition-type", "center",
             "--transition-pos", "center",
             "--transition-step", "90",
@@ -295,7 +465,6 @@ class WallpaperPicker(Gtk.Window):
             pass
 
         self.destroy()
-
 
     def on_draw(self, widget, cr):
         cr.set_operator(cairo.OPERATOR_CLEAR)

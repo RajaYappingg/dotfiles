@@ -50,6 +50,7 @@ hl.on("hyprland.start", function ()
     -- hl.exec_cmd("waybar")
     hl.exec_cmd("awww-daemon || swww-daemon")
     hl.exec_cmd("/home/zaki/.local/bin/brightness-daemon")
+    hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
 end)
 
 
@@ -433,14 +434,14 @@ hl.window_rule({
     name  = "firefox-opacity",
     match = { class = "firefox" },
 
-    opacity = "0.75 0.75 0.75",
+    opacity = "0.75 0.75",
 })
 
 hl.window_rule({
     name  = "firefox-caps-opacity",
     match = { class = "Firefox" },
 
-    opacity = "0.75 0.75 0.75",
+    opacity = "0.75 0.75",
 })
 
 hl.window_rule({

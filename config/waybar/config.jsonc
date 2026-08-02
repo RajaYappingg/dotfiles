@@ -17,6 +17,7 @@
     "modules-right": [
         "custom/cpu",
         "custom/memory",
+        "custom/gpu",
         "custom/temperature",
         "network",
         "pulseaudio",
@@ -62,6 +63,15 @@
         "on-click-right": "/home/zaki/.local/bin/waybar-memory notify"
     },
 
+    "custom/gpu": {
+        "exec": "/home/zaki/.local/bin/waybar-gpu",
+        "return-type": "json",
+        "interval": 3,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-gpu notify"
+    },
+
     "custom/temperature": {
         "exec": "/home/zaki/.local/bin/waybar-temp",
         "return-type": "json",
@@ -102,8 +112,9 @@
         "format-charging": "󰂄  {capacity}%",
         "format-plugged": "  {capacity}%",
         "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
-        "tooltip-format": "Battery: {capacity}%\nClick: Battery Details",
-        "on-click": "/home/zaki/.local/bin/battery-info"
+        "tooltip-format": "Battery: {capacity}%\nClick: Power Profiles Menu\nRight-Click: Battery Details",
+        "on-click": "/home/zaki/.local/bin/battery-menu",
+        "on-click-right": "/home/zaki/.local/bin/battery-info"
     },
 
     "tray": {

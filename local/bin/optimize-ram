@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+echo "🧹 Optimizing System RAM..."
+
+# 1. Kill idle heavy background daemons
+pkill -f gnome-software 2>/dev/null || true
+
+# 2. Sync filesystem caches
+sync
+
+# 3. Drop caches non-interactively if permitted, otherwise log info
+if [ "$EUID" -eq 0 ]; then
+    echo 3 > /proc/sys/vm/drop_caches
+    echo "✅ Kernel PageCache & Slab dropped."
+elif sudo -n true 2>/dev/null; then
+    sudo sysctl -w vm.drop_caches=3 >/dev/null 2>&1
+    echo "✅ Kernel PageCache & Slab dropped."
+else
+    echo "ℹ️ (Opsional) Jalankan 'sudo optimize-ram' untuk mengosongkan cache kernel penuh."
+fi
+
+echo ""
+echo "📊 Current RAM Status:"
+free -h
