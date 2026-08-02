@@ -47,7 +47,7 @@ local menu = "/home/zaki/.local/bin/dashboard-launcher"
 -- See https://wiki.hypr.land/Configuring/Basics/Autostart/
 
 hl.on("hyprland.start", function ()
-    hl.exec_cmd("waybar")
+    -- hl.exec_cmd("waybar")
     hl.exec_cmd("awww-daemon || swww-daemon")
     hl.exec_cmd("/home/zaki/.local/bin/brightness-daemon")
 end)

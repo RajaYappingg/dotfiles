@@ -322,6 +322,47 @@ scale.bright-scale slider:hover, scale.vol-scale slider:hover {
     min-height: 16px;
     margin: -4px 0;
 }
+
+/* System Quick Toggles */
+button.sys-toggle-btn {
+    background-color: rgba(255, 255, 255, 0.06);
+    background-image: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 8px 10px;
+    border-radius: 12px;
+    transition: all 0.2s ease-in-out;
+}
+
+button.sys-toggle-btn.active-toggle {
+    background-color: rgba(0, 180, 219, 0.22);
+    border-color: rgba(0, 180, 219, 0.55);
+}
+
+button.sys-toggle-btn:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+button.sys-toggle-btn.active-toggle:hover {
+    background-color: rgba(0, 180, 219, 0.35);
+    border-color: rgba(0, 180, 219, 0.75);
+}
+
+.sys-toggle-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.sys-toggle-sub {
+    font-size: 9px;
+    font-weight: 500;
+    color: #8899aa;
+}
+
+button.sys-toggle-btn.active-toggle .sys-toggle-sub {
+    color: #00d2ff;
+}
 """
 
 def load_apps():
@@ -430,6 +471,70 @@ def set_volume(percent):
     try:
         val = max(0, min(100, int(percent)))
         subprocess.Popen(['wpctl', 'set-volume', '-l', '1.0', '@DEFAULT_AUDIO_SINK@', f'{val}%'])
+    except Exception:
+        pass
+
+def get_wifi_state():
+    try:
+        res = subprocess.run(["nmcli", "radio", "wifi"], capture_output=True, text=True, timeout=1)
+        return res.stdout.strip() == "enabled"
+    except Exception:
+        return False
+
+def toggle_wifi():
+    try:
+        curr = get_wifi_state()
+        new_state = "off" if curr else "on"
+        subprocess.run(["nmcli", "radio", "wifi", new_state], timeout=2)
+    except Exception:
+        pass
+
+def get_bluetooth_state():
+    try:
+        res = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=1)
+        return "Powered: yes" in res.stdout
+    except Exception:
+        return False
+
+def toggle_bluetooth():
+    try:
+        curr = get_bluetooth_state()
+        cmd = ["bluetoothctl", "power", "off" if curr else "on"]
+        subprocess.run(cmd, timeout=2)
+    except Exception:
+        pass
+
+def get_hotspot_state():
+    try:
+        res = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"], capture_output=True, text=True, timeout=1)
+        return "Hotspot" in res.stdout or "hotspot" in res.stdout.lower()
+    except Exception:
+        return False
+
+def toggle_hotspot():
+    try:
+        curr = get_hotspot_state()
+        if curr:
+            subprocess.run(["nmcli", "con", "down", "Hotspot"], timeout=3)
+        else:
+            res = subprocess.run(["nmcli", "con", "show"], capture_output=True, text=True, timeout=1)
+            if "Hotspot" in res.stdout:
+                subprocess.run(["nmcli", "con", "up", "Hotspot"], timeout=3)
+            else:
+                subprocess.run(["nmcli", "device", "wifi", "hotspot"], timeout=5)
+    except Exception:
+        pass
+
+def get_dnd_state():
+    try:
+        res = subprocess.run(["dunstctl", "is-paused"], capture_output=True, text=True, timeout=1)
+        return res.stdout.strip() == "true"
+    except Exception:
+        return False
+
+def toggle_dnd():
+    try:
+        subprocess.run(["dunstctl", "set-paused", "toggle"], timeout=1)
     except Exception:
         pass
 
@@ -687,6 +792,40 @@ class DashboardLauncher(Gtk.Window):
 
         right_vbox.pack_start(controls_card, False, False, 0)
 
+        # Widget 5: System Quick Options Card (Wi-Fi, Bluetooth, Hotspot, DND)
+        sys_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        sys_card.get_style_context().add_class("widget-card")
+
+        lbl_sys = Gtk.Label(label="System Controls")
+        lbl_sys.set_halign(Gtk.Align.START)
+        lbl_sys.get_style_context().add_class("section-title")
+        sys_card.pack_start(lbl_sys, False, False, 0)
+
+        sys_grid = Gtk.Grid()
+        sys_grid.set_column_spacing(6)
+        sys_grid.set_row_spacing(6)
+        sys_grid.set_column_homogeneous(True)
+
+        self.btn_wifi, self.lbl_wifi_icon, self.lbl_wifi_sub = self.create_toggle_btn("󰤨", "Wi-Fi", "Off")
+        self.btn_wifi.connect("clicked", lambda b: self.on_toggle_click(toggle_wifi))
+
+        self.btn_bt, self.lbl_bt_icon, self.lbl_bt_sub = self.create_toggle_btn("󰂯", "Bluetooth", "Off")
+        self.btn_bt.connect("clicked", lambda b: self.on_toggle_click(toggle_bluetooth))
+
+        self.btn_hs, self.lbl_hs_icon, self.lbl_hs_sub = self.create_toggle_btn("󰤩", "Hotspot", "Off")
+        self.btn_hs.connect("clicked", lambda b: self.on_toggle_click(toggle_hotspot))
+
+        self.btn_dnd, self.lbl_dnd_icon, self.lbl_dnd_sub = self.create_toggle_btn("󰂛", "DND", "Off")
+        self.btn_dnd.connect("clicked", lambda b: self.on_toggle_click(toggle_dnd))
+
+        sys_grid.attach(self.btn_wifi, 0, 0, 1, 1)
+        sys_grid.attach(self.btn_bt, 1, 0, 1, 1)
+        sys_grid.attach(self.btn_hs, 0, 1, 1, 1)
+        sys_grid.attach(self.btn_dnd, 1, 1, 1, 1)
+
+        sys_card.pack_start(sys_grid, False, False, 0)
+        right_vbox.pack_start(sys_card, False, False, 0)
+
         main_hbox.pack_start(right_vbox, False, False, 0)
 
         self.all_apps = load_apps()
@@ -695,6 +834,7 @@ class DashboardLauncher(Gtk.Window):
         # Set default placeholder cover art initially
         self.set_placeholder_art()
         self.update_sliders()
+        self.update_toggles()
 
         threading.Thread(target=self.fetch_weather, daemon=True).start()
         GLib.timeout_add(1000, self.update_media)
@@ -893,7 +1033,93 @@ class DashboardLauncher(Gtk.Window):
     def update_media(self):
         threading.Thread(target=self._async_fetch_media, daemon=True).start()
         self.update_sliders()
+        self.update_toggles()
         return True
+
+    def create_toggle_btn(self, icon_char, title, sub):
+        btn = Gtk.Button()
+        btn.get_style_context().add_class("sys-toggle-btn")
+
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_halign(Gtk.Align.START)
+
+        lbl_icon = Gtk.Label()
+        lbl_icon.set_markup(f"<span foreground='#00d2ff' font='13'>{icon_char}</span>")
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        vbox.set_valign(Gtk.Align.CENTER)
+
+        lbl_title = Gtk.Label(label=title)
+        lbl_title.set_halign(Gtk.Align.START)
+        lbl_title.get_style_context().add_class("sys-toggle-title")
+
+        lbl_sub = Gtk.Label(label=sub)
+        lbl_sub.set_halign(Gtk.Align.START)
+        lbl_sub.get_style_context().add_class("sys-toggle-sub")
+
+        vbox.pack_start(lbl_title, False, False, 0)
+        vbox.pack_start(lbl_sub, False, False, 0)
+
+        box.pack_start(lbl_icon, False, False, 0)
+        box.pack_start(vbox, False, False, 0)
+
+        btn.add(box)
+        return btn, lbl_icon, lbl_sub
+
+    def on_toggle_click(self, func):
+        threading.Thread(target=self._async_toggle, args=(func,), daemon=True).start()
+
+    def _async_toggle(self, func):
+        func()
+        GLib.idle_add(self.update_toggles)
+
+    def update_toggles(self):
+        threading.Thread(target=self._async_fetch_toggles, daemon=True).start()
+
+    def _async_fetch_toggles(self):
+        wifi = get_wifi_state()
+        bt = get_bluetooth_state()
+        hs = get_hotspot_state()
+        dnd = get_dnd_state()
+
+        GLib.idle_add(self._apply_toggles_ui, wifi, bt, hs, dnd)
+
+    def _apply_toggles_ui(self, wifi, bt, hs, dnd):
+        if wifi:
+            self.btn_wifi.get_style_context().add_class("active-toggle")
+            self.lbl_wifi_sub.set_text("Connected")
+            self.lbl_wifi_icon.set_markup("<span foreground='#00d2ff' font='13'>󰤨</span>")
+        else:
+            self.btn_wifi.get_style_context().remove_class("active-toggle")
+            self.lbl_wifi_sub.set_text("Off")
+            self.lbl_wifi_icon.set_markup("<span foreground='#666666' font='13'>󰤭</span>")
+
+        if bt:
+            self.btn_bt.get_style_context().add_class("active-toggle")
+            self.lbl_bt_sub.set_text("On")
+            self.lbl_bt_icon.set_markup("<span foreground='#00d2ff' font='13'>󰂯</span>")
+        else:
+            self.btn_bt.get_style_context().remove_class("active-toggle")
+            self.lbl_bt_sub.set_text("Off")
+            self.lbl_bt_icon.set_markup("<span foreground='#666666' font='13'>󰂲</span>")
+
+        if hs:
+            self.btn_hs.get_style_context().add_class("active-toggle")
+            self.lbl_hs_sub.set_text("Active")
+            self.lbl_hs_icon.set_markup("<span foreground='#00d2ff' font='13'>󰤩</span>")
+        else:
+            self.btn_hs.get_style_context().remove_class("active-toggle")
+            self.lbl_hs_sub.set_text("Off")
+            self.lbl_hs_icon.set_markup("<span foreground='#666666' font='13'>󰤨</span>")
+
+        if dnd:
+            self.btn_dnd.get_style_context().add_class("active-toggle")
+            self.lbl_dnd_sub.set_text("On")
+            self.lbl_dnd_icon.set_markup("<span foreground='#ffaa00' font='13'>󰂛</span>")
+        else:
+            self.btn_dnd.get_style_context().remove_class("active-toggle")
+            self.lbl_dnd_sub.set_text("Off")
+            self.lbl_dnd_icon.set_markup("<span foreground='#666666' font='13'>󰂚</span>")
 
     def _async_fetch_media(self):
         try:
