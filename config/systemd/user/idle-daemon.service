@@ -1,9 +1,9 @@
 [Unit]
-Description=Wayland Idle Lock Daemon
+Description=Wayland Idle Lock Daemon (2 Minutes)
 After=graphical-session.target
 
 [Service]
-ExecStart=/home/zaki/.local/bin/idle-daemon 300
+ExecStart=/home/zaki/.local/bin/idle-daemon 120
 Restart=always
 RestartSec=3
 

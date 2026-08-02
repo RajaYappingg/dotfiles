@@ -51,7 +51,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("awww-daemon || swww-daemon")
     hl.exec_cmd("/home/zaki/.local/bin/brightness-daemon")
     hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
-    hl.exec_cmd("/home/zaki/.local/bin/idle-daemon 300")
+    hl.exec_cmd("/home/zaki/.local/bin/idle-daemon 120")
 end)
 
 

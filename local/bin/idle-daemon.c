@@ -10,7 +10,7 @@ static struct wl_registry *registry = NULL;
 static struct wl_seat *seat = NULL;
 static struct ext_idle_notifier_v1 *idle_notifier = NULL;
 static struct ext_idle_notification_v1 *idle_notification = NULL;
-static uint32_t timeout_ms = 300000; // 5 minutes default
+static uint32_t timeout_ms = 120000; // 2 minutes default (120 seconds)
 
 static void handle_idled(void *data, struct ext_idle_notification_v1 *notification) {
     (void)data;
@@ -40,9 +40,7 @@ static void registry_handle_global(void *data, struct wl_registry *reg, uint32_t
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *reg, uint32_t name) {
-    (void)data;
-    (void)reg;
-    (void)name;
+    (void)data; (void)reg; (void)name;
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -74,6 +72,7 @@ int main(int argc, char **argv) {
 
     idle_notification = ext_idle_notifier_v1_get_idle_notification(idle_notifier, timeout_ms, seat);
     ext_idle_notification_v1_add_listener(idle_notification, &idle_listener, NULL);
+    wl_display_flush(display);
 
     while (wl_display_dispatch(display) != -1) {
     }
