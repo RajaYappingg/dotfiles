@@ -705,11 +705,16 @@ def set_fan_control(fan_type, percent=None, auto=False):
                 f.write(val)
         except PermissionError:
             try:
-                subprocess.run(["pkexec", "sh", "-c", f"chmod 0666 {hwmon}/pwm*"], timeout=5)
+                subprocess.run(["sudo", "-n", "/home/zaki/.local/bin/setup-fan-permissions"], timeout=2)
                 with open(path, "w") as f:
                     f.write(val)
             except Exception:
-                pass
+                try:
+                    subprocess.run(["pkexec", "sh", "-c", f"chmod 0666 {hwmon}/pwm*"], timeout=5)
+                    with open(path, "w") as f:
+                        f.write(val)
+                except Exception:
+                    pass
         except Exception:
             pass
 
