@@ -1,0 +1,515 @@
+#!/usr/bin/env python3
+import os
+import sys
+import re
+import subprocess
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gtk, Gdk, GLib
+
+CONFIG_PATH = os.path.expanduser("~/.config/hypr/hyprland.lua")
+DOTFILES_CONFIG_PATH = os.path.expanduser("~/dotfiles/config/hypr/hyprland.lua")
+
+CSS = b"""
+* {
+    font-family: "JetBrains Mono", "Inter", "Sans", sans-serif;
+    outline: none;
+    box-shadow: none;
+}
+
+window.shortcut-window {
+    background-color: #0f141c;
+    color: #e2e8f0;
+}
+
+.header-box {
+    background-color: #171f2c;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 16px 20px;
+}
+
+.title-label {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.subtitle-label {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.search-entry {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.search-entry:focus {
+    border-color: #00b4db;
+}
+
+.add-btn {
+    background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%);
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 13px;
+    border-radius: 8px;
+    padding: 8px 16px;
+    border: none;
+}
+
+.add-btn:hover {
+    background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+}
+
+.card-box {
+    background-color: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.card-box:hover {
+    border-color: rgba(0, 180, 219, 0.4);
+    background-color: #243347;
+}
+
+.key-badge {
+    background-color: rgba(0, 180, 219, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(0, 180, 219, 0.35);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.cmd-label {
+    font-size: 13px;
+    color: #f1f5f9;
+    font-weight: 500;
+}
+
+.desc-label {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+.icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.delete-btn:hover {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+/* Modal Dialog */
+dialog.custom-dialog {
+    background-color: #171f2c;
+}
+
+.dialog-box {
+    padding: 20px;
+    background-color: #171f2c;
+}
+
+.field-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+
+.dialog-entry {
+    background-color: #0f141c;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.dialog-entry:focus {
+    border-color: #00b4db;
+}
+
+.toast-label {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+"""
+
+class KeybindManager(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Shortcut & Keybind Manager")
+        self.set_name("shortcut-window")
+        self.set_default_size(720, 520)
+        self.set_position(Gtk.WindowPosition.CENTER)
+
+        self.keybinds = []
+        self.raw_lines = []
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # 1. Header Area
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header.get_style_context().add_class("header-box")
+
+        title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_title = Gtk.Label(label="⌨️ Shortcut Manager", xalign=0)
+        lbl_title.get_style_context().add_class("title-label")
+        lbl_sub = Gtk.Label(label="Atur, tambah, & ubah shortcut keyboard Hyprland", xalign=0)
+        lbl_sub.get_style_context().add_class("subtitle-label")
+        title_vbox.pack_start(lbl_title, False, False, 0)
+        title_vbox.pack_start(lbl_sub, False, False, 0)
+
+        header.pack_start(title_vbox, True, True, 0)
+
+        self.btn_add = Gtk.Button(label="+ Tambah Shortcut")
+        self.btn_add.get_style_context().add_class("add-btn")
+        self.btn_add.connect("clicked", self.on_add_clicked)
+        header.pack_start(self.btn_add, False, False, 0)
+
+        main_box.pack_start(header, False, False, 0)
+
+        # 2. Search & Status Bar
+        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        search_box.set_margin_top(12)
+        search_box.set_margin_bottom(8)
+        search_box.set_margin_left(20)
+        search_box.set_margin_right(20)
+
+        self.search_entry = Gtk.Entry()
+        self.search_entry.set_placeholder_text("🔍 Cari shortcut (contoh: SUPER + R, terminal, screenshot)...")
+        self.search_entry.get_style_context().add_class("search-entry")
+        self.search_entry.connect("changed", self.filter_list)
+        search_box.pack_start(self.search_entry, True, True, 0)
+
+        main_box.pack_start(search_box, False, False, 0)
+
+        # Toast Message Box
+        self.toast_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self.toast_box.set_margin_left(20)
+        self.toast_box.set_margin_right(20)
+        self.toast_box.set_margin_bottom(6)
+        self.lbl_toast = Gtk.Label(label="")
+        self.lbl_toast.get_style_context().add_class("toast-label")
+        self.toast_box.pack_start(self.lbl_toast, False, False, 0)
+        main_box.pack_start(self.toast_box, False, False, 0)
+        self.toast_box.hide()
+
+        # 3. List Container
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_margin_left(20)
+        scrolled.set_margin_right(20)
+        scrolled.set_margin_bottom(16)
+
+        self.listbox = Gtk.ListBox()
+        self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        scrolled.add(self.listbox)
+        main_box.pack_start(scrolled, True, True, 0)
+
+        self.connect("destroy", Gtk.main_quit)
+        self.load_config()
+
+    def show_toast(self, msg):
+        self.lbl_toast.set_text(msg)
+        self.toast_box.show_all()
+        GLib.timeout_add_seconds(3, self.toast_box.hide)
+
+    def load_config(self):
+        if not os.path.exists(CONFIG_PATH):
+            return
+
+        with open(CONFIG_PATH, "r") as f:
+            self.raw_lines = f.readlines()
+
+        self.keybinds = []
+        pattern = re.compile(r'^\s*(?:local\s+\w+\s*=\s*)?hl\.bind\((.*?)\)\s*(?:--\s*(.*))?$')
+
+        for idx, line in enumerate(self.raw_lines):
+            line_str = line.strip()
+            if "hl.bind(" in line_str and not line_str.startswith("--"):
+                match = pattern.match(line_str)
+                if match:
+                    args_str = match.group(1)
+                    comment = match.group(2) or ""
+
+                    # Split arguments
+                    parts = [p.strip() for p in args_str.split(",")]
+                    if len(parts) >= 2:
+                        key_expr = parts[0]
+                        action_expr = parts[1]
+
+                        # Clean Key Display
+                        key_display = key_expr.replace('mainMod .. "', 'SUPER').replace('"', '').replace("'", "").strip()
+                        if key_display.startswith("SUPER +"):
+                            pass
+                        elif not key_display.startswith("SUPER"):
+                            key_display = key_display.replace("..", "+").strip()
+
+                        # Clean Action Display
+                        cmd_display = action_expr
+                        m_exec = re.search(r'exec_cmd\((.*?)\)', action_expr)
+                        if m_exec:
+                            cmd_display = m_exec.group(1).strip().strip('"').strip("'")
+                        elif "window.close" in action_expr:
+                            cmd_display = "Tutup Window (Close)"
+                        elif "window.float" in action_expr:
+                            cmd_display = "Toggle Floating Window"
+                        elif "workspace" in action_expr:
+                            cmd_display = f"Workspace Navigation ({action_expr})"
+
+                        self.keybinds.append({
+                            'line_idx': idx,
+                            'key_raw': key_expr,
+                            'key_display': key_display,
+                            'action_raw': action_expr,
+                            'cmd_display': cmd_display,
+                            'comment': comment.strip(),
+                            'is_custom': "CUSTOM USER KEYBIND" in line_str or idx > 330
+                        })
+
+        self.render_list()
+
+    def render_list(self):
+        for child in self.listbox.get_children():
+            self.listbox.remove(child)
+
+        query = self.search_entry.get_text().lower()
+
+        for item in self.keybinds:
+            if query and query not in item['key_display'].lower() and query not in item['cmd_display'].lower():
+                continue
+
+            row = Gtk.ListBoxRow()
+            card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            card.get_style_context().add_class("card-box")
+
+            # Key badge
+            lbl_key = Gtk.Label(label=item['key_display'])
+            lbl_key.get_style_context().add_class("key-badge")
+            card.pack_start(lbl_key, False, False, 0)
+
+            # Cmd & comment info
+            info_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            lbl_cmd = Gtk.Label(label=item['cmd_display'], xalign=0)
+            lbl_cmd.get_style_context().add_class("cmd-label")
+            info_vbox.pack_start(lbl_cmd, False, False, 0)
+
+            if item['comment']:
+                lbl_desc = Gtk.Label(label=item['comment'], xalign=0)
+                lbl_desc.get_style_context().add_class("desc-label")
+                info_vbox.pack_start(lbl_desc, False, False, 0)
+
+            card.pack_start(info_vbox, True, True, 0)
+
+            # Action buttons
+            btn_edit = Gtk.Button(label="✏️")
+            btn_edit.get_style_context().add_class("icon-btn")
+            btn_edit.set_tooltip_text("Ubah Shortcut")
+            btn_edit.connect("clicked", lambda b, it=item: self.on_edit_clicked(it))
+            card.pack_start(btn_edit, False, False, 0)
+
+            btn_del = Gtk.Button(label="🗑️")
+            btn_del.get_style_context().add_class("icon-btn")
+            btn_del.get_style_context().add_class("delete-btn")
+            btn_del.set_tooltip_text("Hapus Shortcut")
+            btn_del.connect("clicked", lambda b, it=item: self.on_delete_clicked(it))
+            card.pack_start(btn_del, False, False, 0)
+
+            row.add(card)
+            self.listbox.add(row)
+
+        self.listbox.show_all()
+
+    def filter_list(self, entry):
+        self.render_list()
+
+    def on_add_clicked(self, btn):
+        dialog = KeybindDialog(self, title="Tambah Shortcut Baru")
+        if dialog.run() == Gtk.ResponseType.OK:
+            key, cmd, comment = dialog.get_data()
+            if key and cmd:
+                self.add_keybind(key, cmd, comment)
+        dialog.destroy()
+
+    def on_edit_clicked(self, item):
+        dialog = KeybindDialog(self, title="Ubah Shortcut", key=item['key_display'], cmd=item['cmd_display'], comment=item['comment'])
+        if dialog.run() == Gtk.ResponseType.OK:
+            key, cmd, comment = dialog.get_data()
+            if key and cmd:
+                self.update_keybind(item, key, cmd, comment)
+        dialog.destroy()
+
+    def on_delete_clicked(self, item):
+        confirm = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text=f"Hapus shortcut {item['key_display']}?"
+        )
+        if confirm.run() == Gtk.ResponseType.YES:
+            self.delete_keybind(item)
+        confirm.destroy()
+
+    def format_lua_bind(self, key, cmd, comment=""):
+        # Format key expression
+        if key.startswith("SUPER"):
+            rest = key[5:].strip()
+            if rest.startswith("+"):
+                rest = rest[1:].strip()
+            key_expr = f'mainMod .. " + {rest}"'
+        else:
+            key_expr = f'"{key}"'
+
+        # Format action expression
+        if cmd.startswith("hl.dsp."):
+            action_expr = cmd
+        else:
+            action_expr = f'hl.dsp.exec_cmd("{cmd}")'
+
+        comment_suffix = f" -- {comment}" if comment else ""
+        return f"hl.bind({key_expr}, {action_expr}){comment_suffix}\n"
+
+    def add_keybind(self, key, cmd, comment):
+        new_line = self.format_lua_bind(key, cmd, comment)
+        
+        # Add under CUSTOM section
+        header_found = False
+        for idx, line in enumerate(self.raw_lines):
+            if "CUSTOM USER KEYBINDINGS" in line:
+                self.raw_lines.insert(idx + 2, new_line)
+                header_found = True
+                break
+
+        if not header_found:
+            self.raw_lines.append("\n--------------------------------\n")
+            self.raw_lines.append("---- CUSTOM USER KEYBINDINGS ----\n")
+            self.raw_lines.append("--------------------------------\n")
+            self.raw_lines.append(new_line)
+
+        self.save_and_apply("Shortcut baru berhasil ditambahkan!")
+
+    def update_keybind(self, item, key, cmd, comment):
+        idx = item['line_idx']
+        new_line = self.format_lua_bind(key, cmd, comment)
+        self.raw_lines[idx] = new_line
+        self.save_and_apply("Shortcut berhasil diperbarui!")
+
+    def delete_keybind(self, item):
+        idx = item['line_idx']
+        self.raw_lines[idx] = f"-- [DELETED] {self.raw_lines[idx]}"
+        self.save_and_apply("Shortcut berhasil dihapus!")
+
+    def save_and_apply(self, success_msg):
+        try:
+            with open(CONFIG_PATH, "w") as f:
+                f.writelines(self.raw_lines)
+
+            # Sync with dotfiles
+            if os.path.exists(os.path.dirname(DOTFILES_CONFIG_PATH)):
+                with open(DOTFILES_CONFIG_PATH, "w") as f:
+                    f.writelines(self.raw_lines)
+
+            # Reload Hyprland instantly
+            subprocess.run(["hyprctl", "reload"], capture_output=True)
+
+            self.load_config()
+            self.show_toast(f"✅ {success_msg} Hyprland direload.")
+        except Exception as e:
+            self.show_toast(f"❌ Gagal menyimpan: {e}")
+
+class KeybindDialog(Gtk.Dialog):
+    def __init__(self, parent, title="Shortcut", key="", cmd="", comment=""):
+        super().__init__(title=title, transient_for=parent, flags=0)
+        self.get_style_context().add_class("custom-dialog")
+        self.set_default_size(440, 280)
+
+        self.add_button("Batal", Gtk.ResponseType.CANCEL)
+        btn_save = self.add_button("Simpan", Gtk.ResponseType.OK)
+        btn_save.get_style_context().add_class("add-btn")
+
+        box = self.get_content_area()
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.get_style_context().add_class("dialog-box")
+
+        # 1. Key Combination Entry
+        lbl_key = Gtk.Label(label="Kombinasi Key (contoh: SUPER + ALT + K / Print / XF86AudioMute)", xalign=0)
+        lbl_key.get_style_context().add_class("field-label")
+        self.entry_key = Gtk.Entry()
+        self.entry_key.set_text(key)
+        self.entry_key.set_placeholder_text("SUPER + SHIFT + X")
+        self.entry_key.get_style_context().add_class("dialog-entry")
+        vbox.pack_start(lbl_key, False, False, 0)
+        vbox.pack_start(self.entry_key, False, False, 0)
+
+        # 2. Command Entry
+        lbl_cmd = Gtk.Label(label="Perintah / Command (contoh: kitty, firefox, /path/to/script)", xalign=0)
+        lbl_cmd.get_style_context().add_class("field-label")
+        self.entry_cmd = Gtk.Entry()
+        self.entry_cmd.set_text(cmd)
+        self.entry_cmd.set_placeholder_text("/home/zaki/.local/bin/optimize-ram")
+        self.entry_cmd.get_style_context().add_class("dialog-entry")
+        vbox.pack_start(lbl_cmd, False, False, 0)
+        vbox.pack_start(self.entry_cmd, False, False, 0)
+
+        # 3. Comment Entry
+        lbl_comment = Gtk.Label(label="Keterangan / Deskripsi (Opsional)", xalign=0)
+        lbl_comment.get_style_context().add_class("field-label")
+        self.entry_comment = Gtk.Entry()
+        self.entry_comment.set_text(comment)
+        self.entry_comment.set_placeholder_text("Shortcut optimasi RAM")
+        self.entry_comment.get_style_context().add_class("dialog-entry")
+        vbox.pack_start(lbl_comment, False, False, 0)
+        vbox.pack_start(self.entry_comment, False, False, 0)
+
+        box.add(vbox)
+        self.show_all()
+
+    def get_data(self):
+        return (
+            self.entry_key.get_text().strip(),
+            self.entry_cmd.get_text().strip(),
+            self.entry_comment.get_text().strip()
+        )
+
+def main():
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(),
+        css_provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+
+    app = KeybindManager()
+    app.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

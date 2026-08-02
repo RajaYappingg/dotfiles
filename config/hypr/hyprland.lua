@@ -282,6 +282,8 @@ hl.bind(mainMod .. " + R", hl.dsp.exec_cmd(menu))
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("/home/zaki/.local/bin/wallpaper-picker"))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("/home/zaki/.local/bin/lockscreen"))
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
+hl.bind(mainMod .. " + K", hl.dsp.exec_cmd("/home/zaki/.local/bin/shortcut"))
+hl.bind(mainMod .. " + ALT + R", hl.dsp.exec_cmd("/home/zaki/.local/bin/optimize-ram"))
 
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
 
