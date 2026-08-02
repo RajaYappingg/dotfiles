@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Helper script to set write permissions for Acer laptop fan pwm sysfs nodes
+for h in /sys/class/hwmon/hwmon*; do
+    if [ -f "$h/name" ] && [ "$(cat "$h/name")" = "acer" ]; then
+        chmod 0666 "$h"/pwm* 2>/dev/null || true
+    fi
+done
