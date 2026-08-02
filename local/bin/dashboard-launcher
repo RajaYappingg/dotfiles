@@ -402,7 +402,7 @@ scale.fan-cpu-scale slider:hover, scale.fan-gpu-scale slider:hover {
     margin: -4px 0;
 }
 
-button.fan-auto-btn {
+button.fan-auto-btn, button.fan-max-btn {
     background-color: rgba(255, 255, 255, 0.06);
     background-image: none;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -414,7 +414,7 @@ button.fan-auto-btn {
     transition: all 0.2s ease-in-out;
 }
 
-button.fan-auto-btn:hover {
+button.fan-auto-btn:hover, button.fan-max-btn:hover {
     background-color: rgba(255, 255, 255, 0.16);
     color: #ffffff;
 }
@@ -423,6 +423,12 @@ button.fan-auto-btn.active-auto {
     background-color: rgba(0, 210, 255, 0.20);
     border-color: rgba(0, 210, 255, 0.55);
     color: #00d2ff;
+}
+
+button.fan-max-btn.active-max {
+    background-color: rgba(255, 68, 68, 0.25);
+    border-color: rgba(255, 68, 68, 0.65);
+    color: #ff4444;
 }
 
 .fan-rpm-label {
@@ -991,14 +997,24 @@ class DashboardLauncher(Gtk.Window):
         self.lbl_cpu_rpm.get_style_context().add_class("fan-rpm-label")
         self.lbl_cpu_rpm.set_halign(Gtk.Align.START)
 
+        cpu_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+
         self.btn_cpu_auto = Gtk.Button(label="AUTO")
         self.btn_cpu_auto.get_style_context().add_class("fan-auto-btn")
         self.btn_cpu_auto.set_tooltip_text("Toggle CPU Fan Auto Mode")
         self.btn_cpu_auto.connect("clicked", self.on_cpu_auto_clicked)
 
+        self.btn_cpu_max = Gtk.Button(label="MAX")
+        self.btn_cpu_max.get_style_context().add_class("fan-max-btn")
+        self.btn_cpu_max.set_tooltip_text("Set CPU Fan Speed to 100%")
+        self.btn_cpu_max.connect("clicked", self.on_cpu_max_clicked)
+
+        cpu_btn_box.pack_start(self.btn_cpu_auto, False, False, 0)
+        cpu_btn_box.pack_start(self.btn_cpu_max, False, False, 0)
+
         cpu_fan_hdr_box.pack_start(lbl_cpu_title, False, False, 0)
         cpu_fan_hdr_box.pack_start(self.lbl_cpu_rpm, True, True, 0)
-        cpu_fan_hdr_box.pack_end(self.btn_cpu_auto, False, False, 0)
+        cpu_fan_hdr_box.pack_end(cpu_btn_box, False, False, 0)
 
         cpu_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
@@ -1032,14 +1048,24 @@ class DashboardLauncher(Gtk.Window):
         self.lbl_gpu_rpm.get_style_context().add_class("fan-rpm-label")
         self.lbl_gpu_rpm.set_halign(Gtk.Align.START)
 
+        gpu_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+
         self.btn_gpu_auto = Gtk.Button(label="AUTO")
         self.btn_gpu_auto.get_style_context().add_class("fan-auto-btn")
         self.btn_gpu_auto.set_tooltip_text("Toggle GPU Fan Auto Mode")
         self.btn_gpu_auto.connect("clicked", self.on_gpu_auto_clicked)
 
+        self.btn_gpu_max = Gtk.Button(label="MAX")
+        self.btn_gpu_max.get_style_context().add_class("fan-max-btn")
+        self.btn_gpu_max.set_tooltip_text("Set GPU Fan Speed to 100%")
+        self.btn_gpu_max.connect("clicked", self.on_gpu_max_clicked)
+
+        gpu_btn_box.pack_start(self.btn_gpu_auto, False, False, 0)
+        gpu_btn_box.pack_start(self.btn_gpu_max, False, False, 0)
+
         gpu_fan_hdr_box.pack_start(lbl_gpu_title, False, False, 0)
         gpu_fan_hdr_box.pack_start(self.lbl_gpu_rpm, True, True, 0)
-        gpu_fan_hdr_box.pack_end(self.btn_gpu_auto, False, False, 0)
+        gpu_fan_hdr_box.pack_end(gpu_btn_box, False, False, 0)
 
         gpu_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
@@ -1295,6 +1321,10 @@ class DashboardLauncher(Gtk.Window):
         val = int(scale.get_value())
         self.lbl_cpu_fan_val.set_text(f"{val}%")
         self.btn_cpu_auto.get_style_context().remove_class("active-auto")
+        if val >= 99:
+            self.btn_cpu_max.get_style_context().add_class("active-max")
+        else:
+            self.btn_cpu_max.get_style_context().remove_class("active-max")
         set_fan_control("cpu", percent=val, auto=False)
 
     def on_gpu_fan_slider_changed(self, scale):
@@ -1303,6 +1333,10 @@ class DashboardLauncher(Gtk.Window):
         val = int(scale.get_value())
         self.lbl_gpu_fan_val.set_text(f"{val}%")
         self.btn_gpu_auto.get_style_context().remove_class("active-auto")
+        if val >= 99:
+            self.btn_gpu_max.get_style_context().add_class("active-max")
+        else:
+            self.btn_gpu_max.get_style_context().remove_class("active-max")
         set_fan_control("gpu", percent=val, auto=False)
 
     def on_cpu_auto_clicked(self, btn):
@@ -1311,6 +1345,14 @@ class DashboardLauncher(Gtk.Window):
 
     def on_gpu_auto_clicked(self, btn):
         set_fan_control("gpu", auto=True)
+        self.update_fan_ui()
+
+    def on_cpu_max_clicked(self, btn):
+        set_fan_control("cpu", percent=100, auto=False)
+        self.update_fan_ui()
+
+    def on_gpu_max_clicked(self, btn):
+        set_fan_control("gpu", percent=100, auto=False)
         self.update_fan_ui()
 
     def update_fan_ui(self):
@@ -1328,12 +1370,17 @@ class DashboardLauncher(Gtk.Window):
 
             if status["cpu_auto"]:
                 self.btn_cpu_auto.get_style_context().add_class("active-auto")
+                self.btn_cpu_max.get_style_context().remove_class("active-max")
                 self.scale_cpu_fan.set_value(status["cpu_percent"])
                 self.lbl_cpu_fan_val.set_text("Auto")
             else:
                 self.btn_cpu_auto.get_style_context().remove_class("active-auto")
                 self.scale_cpu_fan.set_value(status["cpu_percent"])
                 self.lbl_cpu_fan_val.set_text(f"{status['cpu_percent']}%")
+                if status["cpu_percent"] >= 99:
+                    self.btn_cpu_max.get_style_context().add_class("active-max")
+                else:
+                    self.btn_cpu_max.get_style_context().remove_class("active-max")
 
             # GPU Fan
             if status["gpu_rpm"] > 0:
@@ -1343,12 +1390,17 @@ class DashboardLauncher(Gtk.Window):
 
             if status["gpu_auto"]:
                 self.btn_gpu_auto.get_style_context().add_class("active-auto")
+                self.btn_gpu_max.get_style_context().remove_class("active-max")
                 self.scale_gpu_fan.set_value(status["gpu_percent"])
                 self.lbl_gpu_fan_val.set_text("Auto")
             else:
                 self.btn_gpu_auto.get_style_context().remove_class("active-auto")
                 self.scale_gpu_fan.set_value(status["gpu_percent"])
                 self.lbl_gpu_fan_val.set_text(f"{status['gpu_percent']}%")
+                if status["gpu_percent"] >= 99:
+                    self.btn_gpu_max.get_style_context().add_class("active-max")
+                else:
+                    self.btn_gpu_max.get_style_context().remove_class("active-max")
         finally:
             self._updating_sliders = False
 
