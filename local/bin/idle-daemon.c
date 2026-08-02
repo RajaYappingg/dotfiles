@@ -15,11 +15,9 @@ static uint32_t timeout_ms = 120000; // 2 minutes default (120 seconds)
 static void handle_idled(void *data, struct ext_idle_notification_v1 *notification) {
     (void)data;
     (void)notification;
-    printf("[idle-daemon] IDLE timeout (%u ms) reached -> launching lockscreen\n", timeout_ms);
+    printf("[idle-daemon] IDLE timeout (%u ms) reached -> launching lockscreen via hyprctl\n", timeout_ms);
     fflush(stdout);
-    if (system("pgrep -f /home/zaki/.local/bin/lockscreen > /dev/null 2>&1") != 0) {
-        system("/home/zaki/.local/bin/lockscreen &");
-    }
+    system("hyprctl dispatch 'hl.dsp.exec_cmd(\"/home/zaki/.local/bin/lockscreen\")'");
 }
 
 static void handle_resumed(void *data, struct ext_idle_notification_v1 *notification) {
