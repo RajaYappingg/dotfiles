@@ -51,6 +51,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("awww-daemon || swww-daemon")
     hl.exec_cmd("/home/zaki/.local/bin/brightness-daemon")
     hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
+    hl.exec_cmd("/home/zaki/.local/bin/idle-daemon 300")
 end)
 
 
@@ -271,6 +272,11 @@ hl.device({
 
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
 
+-- Submap for lockscreen to block all global shortcuts
+hl.define_submap("lockscreen", function()
+    hl.bind("SUPER + Escape", hl.dsp.no_op())
+end)
+
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal))
 local closeWindowBind = hl.bind(mainMod .. " + C", hl.dsp.window.close())
@@ -371,12 +377,12 @@ hl.window_rule({
 })
 
 -- Layer rules also return a handle.
--- local overlayLayerRule = hl.layer_rule({
---     name  = "no-anim-overlay",
---     match = { namespace = "^my-overlay$" },
---     no_anim = true,
--- })
--- overlayLayerRule:set_enabled(false)
+hl.layer_rule({
+    name  = "lockscreen-blur",
+    match = { namespace = "^lockscreen$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
 
 -- Hyprland-run windowrule
 hl.window_rule({

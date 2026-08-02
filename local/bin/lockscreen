@@ -25,7 +25,7 @@ CSS = b"""
 }
 
 window.lock-window {
-    background-color: rgba(10, 10, 15, 0.45);
+    background-color: rgba(15, 15, 24, 0.65);
 }
 
 .date-label {
@@ -37,12 +37,18 @@ window.lock-window {
 }
 
 .pass-entry-box {
-    background-color: rgba(230, 230, 235, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.40);
+    background-color: rgba(235, 235, 242, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.50);
     border-radius: 9999px;
-    padding: 2px 8px;
-    margin-top: 10px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
+    padding: 4px 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.40);
+    transition: all 0.2s ease-in-out;
+}
+
+.pass-entry-box:focus-within {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(120, 160, 255, 0.80);
+    box-shadow: 0 12px 35px rgba(80, 130, 255, 0.35);
 }
 
 .pass-entry {
@@ -50,14 +56,14 @@ window.lock-window {
     border: none;
     color: #1a1a24;
     padding: 8px 16px;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
 }
 
 .lock-icon {
     font-family: "FiraCode Nerd Font", "JetBrainsMono Nerd Font", sans-serif;
     color: #222230;
-    font-size: 14px;
+    font-size: 15px;
     margin-left: 12px;
 }
 
@@ -70,51 +76,117 @@ window.lock-window {
 }
 """
 
+def ease_out_cubic(t):
+    t = max(0.0, min(1.0, t))
+    return 1.0 - math.pow(1.0 - t, 3)
+
+def ease_out_back(t):
+    t = max(0.0, min(1.0, t))
+    c1 = 1.70158
+    c3 = c1 + 1.0
+    return 1.0 + c3 * math.pow(t - 1.0, 3) + c1 * math.pow(t - 1.0, 2)
+
+def ease_in_cubic(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * t
+
+
 class GradientClock(Gtk.DrawingArea):
     def __init__(self):
         super().__init__()
-        self.hours = "00"
-        self.minutes = "00"
-        self.set_size_request(400, 260)
+        self.curr_h = "00"
+        self.curr_m = "00"
+        self.prev_h = None
+        self.prev_m = None
+        
+        self.h_anim_start = 0
+        self.m_anim_start = 0
+        self.anim_duration = 0.35  # seconds
+        
+        self.entrance_progress = 0.0
+        
+        self.set_size_request(420, 270)
         self.connect("draw", self.on_draw)
 
+    def set_entrance(self, progress):
+        self.entrance_progress = ease_out_back(progress)
+        self.queue_draw()
+
     def set_time(self, h, m):
-        if self.hours != h or self.minutes != m:
-            self.hours = h
-            self.minutes = m
-            self.queue_draw()
+        now = time.time()
+        if self.curr_h != h:
+            if self.curr_h != "00":
+                self.prev_h = self.curr_h
+                self.h_anim_start = now
+            self.curr_h = h
+        if self.curr_m != m:
+            if self.curr_m != "00":
+                self.prev_m = self.curr_m
+                self.m_anim_start = now
+            self.curr_m = m
+        self.queue_draw()
+
+    def _draw_digits(self, cr, text, x_center, y_pos, alpha=1.0, scale=1.0, y_offset=0.0):
+        cr.save()
+        cr.set_font_size(130 * scale)
+        extents = cr.text_extents(text)
+        x = x_center - (extents.width / 2.0 + extents.x_bearing)
+        y = y_pos + y_offset
+
+        pat = cairo.LinearGradient(0, y - extents.height, 0, y)
+        pat.add_color_stop_rgba(0.0, 0.98, 0.98, 1.0, 0.95 * alpha)
+        pat.add_color_stop_rgba(1.0, 0.85, 0.88, 0.95, 0.75 * alpha)
+        
+        cr.set_source(pat)
+        cr.move_to(x, y)
+        cr.show_text(text)
+        cr.restore()
 
     def on_draw(self, widget, cr):
         w = widget.get_allocated_width()
         h = widget.get_allocated_height()
+        now = time.time()
 
         cr.set_antialias(cairo.ANTIALIAS_BEST)
         cr.select_font_face("Inter", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(130)
 
-        # Draw Hours (Top)
-        extents_h = cr.text_extents(self.hours)
-        x_h = (w - extents_h.width) / 2 - extents_h.x_bearing
-        y_h = 120
+        scale = 0.85 + 0.15 * max(0.0, min(1.0, self.entrance_progress))
+        entrance_y_offset = (1.0 - max(0.0, min(1.0, self.entrance_progress))) * -30.0
 
-        pat_h = cairo.LinearGradient(0, y_h - extents_h.height, 0, y_h)
-        pat_h.add_color_stop_rgba(0.0, 0.95, 0.95, 0.98, 0.95)
-        pat_h.add_color_stop_rgba(1.0, 0.85, 0.87, 0.92, 0.75)
-        cr.set_source(pat_h)
-        cr.move_to(x_h, y_h)
-        cr.show_text(self.hours)
+        # --- HOURS ANIMATION ---
+        h_elapsed = now - self.h_anim_start
+        if self.prev_h and h_elapsed < self.anim_duration:
+            t = h_elapsed / self.anim_duration
+            t_ease = ease_out_cubic(t)
+            # Old hours slide up and fade out
+            self._draw_digits(cr, self.prev_h, w / 2, 120 + entrance_y_offset,
+                              alpha=(1.0 - t_ease) * self.entrance_progress,
+                              scale=scale, y_offset=-40 * t_ease)
+            # New hours slide in from below and fade in
+            self._draw_digits(cr, self.curr_h, w / 2, 120 + entrance_y_offset,
+                              alpha=t_ease * self.entrance_progress,
+                              scale=scale, y_offset=40 * (1.0 - t_ease))
+        else:
+            self._draw_digits(cr, self.curr_h, w / 2, 120 + entrance_y_offset,
+                              alpha=self.entrance_progress, scale=scale)
 
-        # Draw Minutes (Bottom)
-        extents_m = cr.text_extents(self.minutes)
-        x_m = (w - extents_m.width) / 2 - extents_m.x_bearing
-        y_m = 245
+        # --- MINUTES ANIMATION ---
+        m_elapsed = now - self.m_anim_start
+        if self.prev_m and m_elapsed < self.anim_duration:
+            t = m_elapsed / self.anim_duration
+            t_ease = ease_out_cubic(t)
+            # Old minutes slide up and fade out
+            self._draw_digits(cr, self.prev_m, w / 2, 245 + entrance_y_offset,
+                              alpha=(1.0 - t_ease) * self.entrance_progress,
+                              scale=scale, y_offset=-40 * t_ease)
+            # New minutes slide in from below and fade in
+            self._draw_digits(cr, self.curr_m, w / 2, 245 + entrance_y_offset,
+                              alpha=t_ease * self.entrance_progress,
+                              scale=scale, y_offset=40 * (1.0 - t_ease))
+        else:
+            self._draw_digits(cr, self.curr_m, w / 2, 245 + entrance_y_offset,
+                              alpha=self.entrance_progress, scale=scale)
 
-        pat_m = cairo.LinearGradient(0, y_m - extents_m.height, 0, y_m)
-        pat_m.add_color_stop_rgba(0.0, 0.95, 0.95, 0.98, 0.95)
-        pat_m.add_color_stop_rgba(1.0, 0.85, 0.87, 0.92, 0.75)
-        cr.set_source(pat_m)
-        cr.move_to(x_m, y_m)
-        cr.show_text(self.minutes)
 
 class MinimalAestheticLockScreen(Gtk.Window):
     def __init__(self):
@@ -122,6 +194,7 @@ class MinimalAestheticLockScreen(Gtk.Window):
         self.set_title("Hyprland Lockscreen")
 
         GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "lockscreen")
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         if hasattr(GtkLayerShell, "set_keyboard_mode"):
             GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
@@ -166,9 +239,9 @@ class MinimalAestheticLockScreen(Gtk.Window):
         spacer.set_size_request(1, 140)
 
         # 3. Pill / Capsule Password Entry Box
-        pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        pass_box.get_style_context().add_class("pass-entry-box")
-        pass_box.set_halign(Gtk.Align.CENTER)
+        self.pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.pass_box.get_style_context().add_class("pass-entry-box")
+        self.pass_box.set_halign(Gtk.Align.CENTER)
 
         lbl_lock_icon = Gtk.Label(label="󰌾")
         lbl_lock_icon.get_style_context().add_class("lock-icon")
@@ -180,8 +253,8 @@ class MinimalAestheticLockScreen(Gtk.Window):
         self.entry_pass.set_width_chars(20)
         self.entry_pass.connect("activate", self.on_authenticate)
 
-        pass_box.pack_start(lbl_lock_icon, False, False, 0)
-        pass_box.pack_start(self.entry_pass, False, False, 0)
+        self.pass_box.pack_start(lbl_lock_icon, False, False, 0)
+        self.pass_box.pack_start(self.entry_pass, False, False, 0)
 
         # Status Label (for incorrect password feedback)
         self.lbl_status = Gtk.Label(label="")
@@ -191,20 +264,35 @@ class MinimalAestheticLockScreen(Gtk.Window):
         main_box.pack_start(self.clock_widget, False, False, 0)
         main_box.pack_start(self.lbl_date, False, False, 0)
         main_box.pack_start(spacer, False, False, 0)
-        main_box.pack_start(pass_box, False, False, 0)
+        main_box.pack_start(self.pass_box, False, False, 0)
         main_box.pack_start(self.lbl_status, False, False, 0)
 
         self.add(main_box)
 
-        self.anim_opacity = 0.0
-        self.set_opacity(0.0)
+        # Animation states
+        self.start_time = time.time()
+        self.is_closing = False
+        self.close_time = 0
+        self.shake_start = 0
         self.is_authenticating = False
+
+        # Initial hidden states for staggered animation
+        self.set_opacity(0.0)
+        self.lbl_date.set_opacity(0.0)
+        self.pass_box.set_opacity(0.0)
+        self.lbl_status.set_opacity(0.0)
+
+        # Activate lockscreen submap to block all Hyprland global shortcuts (e.g. Super+R, Super+Q, Super+E, etc.)
+        try:
+            subprocess.run(["hyprctl", "eval", "hl.dispatch(hl.dsp.submap('lockscreen'))"], check=False)
+        except Exception:
+            pass
 
         self.show_all()
         self.entry_pass.grab_focus()
 
         GLib.timeout_add(1000, self.update_clock)
-        GLib.timeout_add(16, self.animate_fade_in)
+        GLib.timeout_add(16, self.on_animation_frame)
 
     def update_clock(self):
         h_str = time.strftime("%H")
@@ -214,22 +302,67 @@ class MinimalAestheticLockScreen(Gtk.Window):
         self.lbl_date.set_text(d_str)
         return True
 
-    def animate_fade_in(self):
-        self.anim_opacity += 0.08
-        if self.anim_opacity >= 1.0:
-            self.set_opacity(1.0)
-            return False
-        self.set_opacity(self.anim_opacity)
-        return True
+    def trigger_shake(self):
+        self.shake_start = time.time()
 
-    def animate_fade_out_and_quit(self):
-        self.anim_opacity -= 0.1
-        if self.anim_opacity <= 0.0:
-            self.set_opacity(0.0)
-            Gtk.main_quit()
-            return False
-        self.set_opacity(self.anim_opacity)
-        return True
+    def on_animation_frame(self):
+        now = time.time()
+
+        if not self.is_closing:
+            elapsed = now - self.start_time
+
+            # 1. Window Fade-in (0s -> 0.35s)
+            win_progress = ease_out_cubic(elapsed / 0.35)
+            self.set_opacity(win_progress)
+
+            # 2. Clock Entrance (0s -> 0.45s)
+            clock_t = ease_out_cubic(elapsed / 0.45)
+            self.clock_widget.set_entrance(clock_t)
+
+            # 3. Date Label Entrance (0.08s -> 0.48s)
+            date_elapsed = elapsed - 0.08
+            if date_elapsed > 0:
+                date_t = ease_out_cubic(date_elapsed / 0.40)
+                self.lbl_date.set_opacity(date_t)
+                margin_offset = int((1.0 - date_t) * 15)
+                self.lbl_date.set_margin_top(4 + margin_offset)
+
+            # 4. Pass Box Entrance (0.15s -> 0.55s)
+            pass_elapsed = elapsed - 0.15
+            if pass_elapsed > 0:
+                pass_t = ease_out_back(pass_elapsed / 0.40)
+                self.pass_box.set_opacity(min(1.0, pass_t))
+                margin_offset = int((1.0 - pass_t) * 25)
+                self.pass_box.set_margin_top(10 + margin_offset)
+
+            # 5. Shake Animation (if triggered on wrong password)
+            if self.shake_start > 0:
+                s_elapsed = now - self.shake_start
+                if s_elapsed < 0.45:
+                    offset = math.sin(s_elapsed * 35.0) * 16.0 * math.exp(-s_elapsed * 7.0)
+                    self.pass_box.set_margin_start(int(offset))
+                    self.pass_box.set_margin_end(int(-offset))
+                else:
+                    self.shake_start = 0
+                    self.pass_box.set_margin_start(0)
+                    self.pass_box.set_margin_end(0)
+
+            # Re-draw clock for any active digit transitions
+            self.clock_widget.queue_draw()
+            return True
+
+        else:
+            # Closing Animation (Fade out + scale out)
+            c_elapsed = now - self.close_time
+            if c_elapsed < 0.25:
+                progress = 1.0 - ease_in_cubic(c_elapsed / 0.25)
+                self.set_opacity(progress)
+                self.clock_widget.set_entrance(progress)
+                return True
+            else:
+                self.set_opacity(0.0)
+                Gtk.main_quit()
+                return False
 
     def on_key_press(self, widget, event):
         if event.keyval == Gdk.KEY_Escape:
@@ -246,6 +379,7 @@ class MinimalAestheticLockScreen(Gtk.Window):
 
         self.is_authenticating = True
         self.lbl_status.set_markup("<span foreground='#ffffff'>Authenticating...</span>")
+        self.lbl_status.set_opacity(1.0)
         self.entry_pass.set_sensitive(False)
 
         threading.Thread(target=self._verify_password_async, args=(password,), daemon=True).start()
@@ -269,15 +403,23 @@ class MinimalAestheticLockScreen(Gtk.Window):
 
         if success:
             self.lbl_status.set_markup("<span foreground='#00ff99'>✓ Unlocked</span>")
-            GLib.timeout_add(16, self.animate_fade_out_and_quit)
+            self.is_closing = True
+            self.close_time = time.time()
         else:
             self.lbl_status.set_markup("<span foreground='#ff4444'>✕ Incorrect password</span>")
             self.entry_pass.set_text("")
             self.entry_pass.grab_focus()
+            self.trigger_shake()
 
 def main():
-    app = MinimalAestheticLockScreen()
-    Gtk.main()
+    try:
+        app = MinimalAestheticLockScreen()
+        Gtk.main()
+    finally:
+        try:
+            subprocess.run(["hyprctl", "eval", "hl.dispatch(hl.dsp.submap('reset'))"], check=False)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     main()
