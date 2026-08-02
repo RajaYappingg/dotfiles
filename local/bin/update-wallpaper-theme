@@ -6,7 +6,6 @@ import colorsys
 import json
 import hashlib
 import subprocess
-import time
 
 import gi
 gi.require_version('GdkPixbuf', '2.0')
@@ -49,14 +48,14 @@ def get_wallpaper_image_path(wallpaper_path):
 
 def extract_palette(image_path):
     default_palette = {
-        'primary': '#ff5599',
-        'secondary': '#e06c75',
-        'bg_dark': '#120b18',
-        'bg_pill': '#1f1325',
-        'border': '#ff5599',
+        'primary': '#00b4db',
+        'secondary': '#0083b0',
+        'bg_dark': '#0b0f19',
+        'bg_pill': '#141a24',
+        'border': '#00b4db',
         'text': '#ffffff',
-        'fastfetch_key': 'magenta',
-        'fastfetch_title': 'magenta'
+        'fastfetch_key': 'cyan',
+        'fastfetch_title': 'blue'
     }
 
     if not image_path or not os.path.exists(image_path):
@@ -72,7 +71,8 @@ def extract_palette(image_path):
     rowstride = pixbuf.get_rowstride()
     w, h = pixbuf.get_width(), pixbuf.get_height()
 
-    color_candidates = []
+    bucket_scores = {}
+    bucket_pixels = {}
 
     for y in range(0, h, 2):
         for x in range(0, w, 2):
@@ -83,30 +83,46 @@ def extract_palette(image_path):
 
             h_val, s_val, v_val = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
 
-            # Filter out dull/grayish/blackish pixels
-            if s_val > 0.22 and v_val > 0.25:
-                color_candidates.append((r, g, b, h_val, s_val, v_val))
+            # Filter out extreme blacks/whites/grays
+            if s_val < 0.15 or v_val < 0.15:
+                continue
 
-    if not color_candidates:
+            # Group into 12 hue buckets (30 degrees each)
+            hue_bucket = int(h_val * 12) % 12
+            score = 1.0 + (s_val * 1.5) + (v_val * 0.5)
+
+            bucket_scores[hue_bucket] = bucket_scores.get(hue_bucket, 0) + score
+            if hue_bucket not in bucket_pixels:
+                bucket_pixels[hue_bucket] = []
+            bucket_pixels[hue_bucket].append((r, g, b, h_val, s_val, v_val))
+
+    if not bucket_scores:
         return default_palette
 
-    # Sort by saturation & brightness score
-    color_candidates.sort(key=lambda c: (c[4] * 2.5) + c[5], reverse=True)
-    best_r, best_g, best_b, best_h, best_s, best_v = color_candidates[0]
+    sorted_buckets = sorted(bucket_scores.items(), key=lambda item: item[1], reverse=True)
+    
+    # 1. Pick dominant hue bucket
+    primary_bucket = sorted_buckets[0][0]
+    primary_candidates = bucket_pixels[primary_bucket]
+    primary_candidates.sort(key=lambda c: (c[4] * 1.5) + c[5], reverse=True)
+    top_p = primary_candidates[0]
 
-    # Ensure Primary Accent is bright and vivid (boost V if too dark)
-    v_boosted = max(0.85, best_v)
-    s_boosted = min(1.0, max(0.4, best_s))
-    pr_f, pg_f, pb_f = colorsys.hsv_to_rgb(best_h, s_boosted, v_boosted)
+    h_val, s_val, v_val = top_p[3], top_p[4], top_p[5]
+    v_boosted = max(0.80, v_val)
+    s_boosted = min(1.0, max(0.45, s_val))
+    pr_f, pg_f, pb_f = colorsys.hsv_to_rgb(h_val, s_boosted, v_boosted)
     primary_rgb = (int(pr_f * 255), int(pg_f * 255), int(pb_f * 255))
 
-    # Pick secondary color with distinct hue
+    # 2. Pick secondary color from 2nd dominant bucket
     secondary_rgb = primary_rgb
-    for r, g, b, h_val, s_val, v_val in color_candidates:
-        if abs(h_val - best_h) > 0.1:
-            sr_f, sg_f, sb_f = colorsys.hsv_to_rgb(h_val, min(1.0, s_val * 1.1), max(0.8, v_val))
-            secondary_rgb = (int(sr_f * 255), int(sg_f * 255), int(sb_f * 255))
-            break
+    if len(sorted_buckets) > 1:
+        sec_bucket = sorted_buckets[1][0]
+        sec_candidates = bucket_pixels[sec_bucket]
+        sec_candidates.sort(key=lambda c: (c[4] * 1.5) + c[5], reverse=True)
+        top_s = sec_candidates[0]
+        sh_val, ss_val, sv_val = top_s[3], top_s[4], top_s[5]
+        sr_f, sg_f, sb_f = colorsys.hsv_to_rgb(sh_val, min(1.0, ss_val * 1.1), max(0.75, sv_val))
+        secondary_rgb = (int(sr_f * 255), int(sg_f * 255), int(sb_f * 255))
 
     # Calculate wallpaper-tinted dark pill background
     pr, pg, pb = primary_rgb
@@ -114,7 +130,7 @@ def extract_palette(image_path):
     bg_g = int(pg * 0.08 + 10)
     bg_b = int(pb * 0.12 + 16)
 
-    pill_r = int(pr * 0.16 + 22)
+    pill_r = int(pr * 0.16 + 20)
     pill_g = int(pg * 0.14 + 18)
     pill_b = int(pb * 0.18 + 26)
 
@@ -123,8 +139,8 @@ def extract_palette(image_path):
     bg_dark_hex = f"#{bg_r:02x}{bg_g:02x}{bg_b:02x}"
     bg_pill_hex = f"#{pill_r:02x}{pill_g:02x}{pill_b:02x}"
 
-    h_deg = best_h * 360
-    fastfetch_key = "magenta"
+    h_deg = h_val * 360
+    fastfetch_key = "cyan"
     if 340 <= h_deg or h_deg < 20:
         fastfetch_key = "red"
     elif 20 <= h_deg < 50:

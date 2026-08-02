@@ -11,8 +11,8 @@
   "display": {
     "separator": " ➜  ",
     "color": {
-      "keys": "magenta",
-      "title": "magenta"
+      "keys": "cyan",
+      "title": "cyan"
     }
   },
   "modules": [
