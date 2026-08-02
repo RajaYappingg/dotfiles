@@ -1,4 +1,5 @@
-/* Compact Floating Rounded Pills AMOLED Black & White Waybar Style */
+/* Dynamic Rounded Pills Waybar Style */
+@import "colors.css";
 
 * {
     border: none;
@@ -11,7 +12,7 @@
 
 window#waybar {
     background-color: transparent;
-    color: #ffffff;
+    color: @text_main;
     border: none;
 }
 
@@ -22,14 +23,15 @@ window#waybar {
 #temperature,
 #custom-cpu,
 #custom-memory,
+#custom-gpu,
 #custom-temperature,
 #network,
 #pulseaudio,
 #battery,
 #tray {
-    background-color: #000000;
-    color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.20);
+    background-color: @bg_pill;
+    color: @text_main;
+    border: 1px solid @primary;
     border-radius: 9999px;
     padding: 3px 12px;
     margin: 1px 3px;
@@ -44,9 +46,9 @@ window#waybar {
 
 /* Compact Perfect Circle Workspace Buttons */
 #workspaces button {
-    background-color: #000000;
-    color: #888888;
-    border: 1px solid rgba(255, 255, 255, 0.20);
+    background-color: @bg_pill;
+    color: @text_main;
+    border: 1px solid @primary;
     border-radius: 50%;
     min-width: 24px;
     min-height: 24px;
@@ -56,14 +58,15 @@ window#waybar {
 }
 
 #workspaces button.active {
-    background-color: #ffffff;
-    color: #000000;
-    border-color: #ffffff;
+    background-color: @primary;
+    color: @bg_dark;
+    border-color: @primary;
     font-weight: bold;
 }
 
 #clock {
     font-weight: 700;
-    border-color: rgba(255, 255, 255, 0.35);
+    color: @primary;
+    border-color: @primary;
     padding: 3px 16px;
 }

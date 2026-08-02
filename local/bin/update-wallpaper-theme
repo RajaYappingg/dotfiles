@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+import os
+import sys
+import math
+import colorsys
+import json
+import hashlib
+import subprocess
+
+import gi
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import GdkPixbuf
+
+CACHE_WALLPAPER = os.path.expanduser("~/.cache/current_wallpaper")
+WAYBAR_COLORS_CSS = os.path.expanduser("~/.config/waybar/colors.css")
+WAYBAR_DOTFILES_COLORS = os.path.expanduser("~/dotfiles/config/waybar/colors.css")
+FASTFETCH_CONFIG = os.path.expanduser("~/.config/fastfetch/config.jsonc")
+FASTFETCH_DOTFILES = os.path.expanduser("~/dotfiles/config/fastfetch/config.jsonc")
+
+VIDEO_EXTS = {'.mp4', '.mkv', '.webm', '.avi', '.mov'}
+
+def get_wallpaper_image_path(wallpaper_path):
+    if not wallpaper_path or not os.path.exists(wallpaper_path):
+        return None
+
+    ext = os.path.splitext(wallpaper_path)[1].lower()
+    if ext in VIDEO_EXTS:
+        # Check thumbnail cache
+        thumb_dir = os.path.expanduser("~/.cache/wallpaper_thumbs")
+        os.makedirs(thumb_dir, exist_ok=True)
+        mtime = os.path.getmtime(wallpaper_path)
+        file_hash = hashlib.md5(f"{wallpaper_path}_{mtime}".encode('utf-8')).hexdigest()
+        cache_thumb = os.path.join(thumb_dir, f"{file_hash}.jpg")
+
+        if not os.path.exists(cache_thumb):
+            try:
+                cmd = [
+                    "ffmpeg", "-y", "-ss", "00:00:01", "-i", wallpaper_path,
+                    "-vframes", "1", "-vf", "scale=320:180:force_original_aspect_ratio=decrease",
+                    cache_thumb
+                ]
+                subprocess.run(cmd, capture_output=True, check=True)
+            except Exception:
+                return None
+
+        return cache_thumb if os.path.exists(cache_thumb) else None
+
+    return wallpaper_path
+
+def extract_palette(image_path):
+    default_palette = {
+        'primary': '#00b4db',
+        'secondary': '#0083b0',
+        'bg_dark': '#0b0f19',
+        'bg_pill': '#141a24',
+        'border': '#00b4db',
+        'text': '#ffffff',
+        'fastfetch_key': 'cyan',
+        'fastfetch_title': 'blue'
+    }
+
+    if not image_path or not os.path.exists(image_path):
+        return default_palette
+
+    try:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(image_path, 60, 60, False)
+    except Exception:
+        return default_palette
+
+    pixels = pixbuf.get_pixels()
+    n_channels = pixbuf.get_n_channels()
+    rowstride = pixbuf.get_rowstride()
+    w, h = pixbuf.get_width(), pixbuf.get_height()
+
+    color_counts = {}
+
+    for y in range(0, h, 2):
+        for x in range(0, w, 2):
+            idx = y * rowstride + x * n_channels
+            r = pixels[idx]
+            g = pixels[idx + 1]
+            b = pixels[idx + 2]
+
+            h_val, s_val, v_val = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
+
+            q_r = (r // 16) * 16
+            q_g = (g // 16) * 16
+            q_b = (b // 16) * 16
+            key = (q_r, q_g, q_b)
+
+            weight = 1.0 + (s_val * 3.0) + (v_val * 1.5 if 0.2 < v_val < 0.9 else 0.1)
+            color_counts[key] = color_counts.get(key, 0) + weight
+
+    sorted_colors = sorted(color_counts.items(), key=lambda item: item[1], reverse=True)
+
+    primary_rgb = (0, 180, 219)
+    secondary_rgb = (0, 131, 176)
+
+    # 1. Pick vibrant primary color
+    for (r, g, b), count in sorted_colors:
+        h_val, s_val, v_val = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
+        if s_val > 0.20 and 0.25 < v_val < 0.95:
+            primary_rgb = (r, g, b)
+            break
+
+    # 2. Pick secondary color
+    for (r, g, b), count in sorted_colors:
+        h_val, s_val, v_val = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
+        dist = math.sqrt((r-primary_rgb[0])**2 + (g-primary_rgb[1])**2 + (b-primary_rgb[2])**2)
+        if dist > 50 and s_val > 0.18:
+            secondary_rgb = (r, g, b)
+            break
+
+    pr, pg, pb = primary_rgb
+    bg_r = int(pr * 0.08 + 10)
+    bg_g = int(pg * 0.08 + 12)
+    bg_b = int(pb * 0.08 + 18)
+
+    pill_r = int(pr * 0.15 + 18)
+    pill_g = int(pg * 0.15 + 20)
+    pill_b = int(pb * 0.15 + 28)
+
+    primary_hex = f"#{primary_rgb[0]:02x}{primary_rgb[1]:02x}{primary_rgb[2]:02x}"
+    secondary_hex = f"#{secondary_rgb[0]:02x}{secondary_rgb[1]:02x}{secondary_rgb[2]:02x}"
+    bg_dark_hex = f"#{bg_r:02x}{bg_g:02x}{bg_b:02x}"
+    bg_pill_hex = f"#{pill_r:02x}{pill_g:02x}{pill_b:02x}"
+
+    h_deg = colorsys.rgb_to_hsv(pr/255.0, pg/255.0, pb/255.0)[0] * 360
+    fastfetch_key = "cyan"
+    if 340 <= h_deg or h_deg < 20:
+        fastfetch_key = "red"
+    elif 20 <= h_deg < 50:
+        fastfetch_key = "yellow"
+    elif 50 <= h_deg < 160:
+        fastfetch_key = "green"
+    elif 160 <= h_deg < 200:
+        fastfetch_key = "cyan"
+    elif 200 <= h_deg < 270:
+        fastfetch_key = "blue"
+    elif 270 <= h_deg < 340:
+        fastfetch_key = "magenta"
+
+    return {
+        'primary': primary_hex,
+        'secondary': secondary_hex,
+        'bg_dark': bg_dark_hex,
+        'bg_pill': bg_pill_hex,
+        'border': primary_hex,
+        'text': '#ffffff',
+        'fastfetch_key': fastfetch_key,
+        'fastfetch_title': fastfetch_key
+    }
+
+def update_waybar_colors(palette):
+    css_content = f"""/* Dynamic Colors Generated from Wallpaper */
+@define-color primary {palette['primary']};
+@define-color secondary {palette['secondary']};
+@define-color bg_dark {palette['bg_dark']};
+@define-color bg_pill {palette['bg_pill']};
+@define-color text_main {palette['text']};
+@define-color border_accent {palette['primary']};
+"""
+    os.makedirs(os.path.dirname(WAYBAR_COLORS_CSS), exist_ok=True)
+    with open(WAYBAR_COLORS_CSS, "w") as f:
+        f.write(css_content)
+
+    if os.path.exists(os.path.dirname(WAYBAR_DOTFILES_COLORS)):
+        with open(WAYBAR_DOTFILES_COLORS, "w") as f:
+            f.write(css_content)
+
+def update_fastfetch_colors(palette):
+    if not os.path.exists(FASTFETCH_CONFIG):
+        return
+
+    try:
+        with open(FASTFETCH_CONFIG, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        for line in lines:
+            if '"keys":' in line:
+                new_lines.append(f'      "keys": "{palette["fastfetch_key"]}",\n')
+            elif '"title":' in line and '"display":' not in line:
+                new_lines.append(f'      "title": "{palette["fastfetch_title"]}"\n')
+            else:
+                new_lines.append(line)
+
+        # If display.color not present in config.jsonc, update display block
+        content_str = "".join(new_lines)
+        if '"color":' not in content_str:
+            content_str = content_str.replace(
+                '"display": {\n    "separator": " ➜  "\n  },',
+                f'"display": {{\n    "separator": " ➜  ",\n    "color": {{\n      "keys": "{palette["fastfetch_key"]}",\n      "title": "{palette["fastfetch_title"]}"\n    }}\n  }},'
+            )
+
+        with open(FASTFETCH_CONFIG, "w") as f:
+            f.write(content_str)
+
+        if os.path.exists(os.path.dirname(FASTFETCH_DOTFILES)):
+            with open(FASTFETCH_DOTFILES, "w") as f:
+                f.write(content_str)
+    except Exception as e:
+        print(f"Error updating fastfetch config: {e}")
+
+def main():
+    wallpaper_path = None
+    if len(sys.argv) > 1:
+        wallpaper_path = sys.argv[1]
+    elif os.path.exists(CACHE_WALLPAPER):
+        with open(CACHE_WALLPAPER, "r") as f:
+            wallpaper_path = f.read().strip()
+
+    if not wallpaper_path:
+        print("No wallpaper path provided or cached.")
+        return
+
+    img_path = get_wallpaper_image_path(wallpaper_path)
+    palette = extract_palette(img_path)
+
+    update_waybar_colors(palette)
+    update_fastfetch_colors(palette)
+
+    # Reload Waybar live
+    subprocess.run(["pkill", "-SIGUSR2", "waybar"], capture_output=True)
+    subprocess.run(["pkill", "-x", "waybar"], capture_output=True)
+    subprocess.Popen(["waybar"])
+
+    print(f"🎨 Theme updated successfully for wallpaper: {os.path.basename(wallpaper_path)}")
+    print(f"   Primary Accent: {palette['primary']}")
+    print(f"   Fastfetch Color: {palette['fastfetch_key']}")
+
+if __name__ == "__main__":
+    main()

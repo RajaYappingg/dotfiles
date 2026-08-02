@@ -425,6 +425,7 @@ class WallpaperPicker(Gtk.Window):
                     "*", original_filepath
                 ]
                 subprocess.Popen(cmd_mpvpaper, env=env)
+                subprocess.Popen(["/home/zaki/.local/bin/update-wallpaper-theme", original_filepath])
                 self.destroy()
                 return
 
@@ -461,6 +462,7 @@ class WallpaperPicker(Gtk.Window):
 
         try:
             subprocess.run(cmd_awww, capture_output=True, env=env)
+            subprocess.Popen(["/home/zaki/.local/bin/update-wallpaper-theme", original_filepath])
         except Exception:
             pass
 
