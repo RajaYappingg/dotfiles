@@ -15,6 +15,8 @@ static uint32_t timeout_ms = 120000; // 2 minutes default (120 seconds)
 static void handle_idled(void *data, struct ext_idle_notification_v1 *notification) {
     (void)data;
     (void)notification;
+    printf("[idle-daemon] IDLE timeout (%u ms) reached -> launching lockscreen\n", timeout_ms);
+    fflush(stdout);
     if (system("pgrep -f /home/zaki/.local/bin/lockscreen > /dev/null 2>&1") != 0) {
         system("/home/zaki/.local/bin/lockscreen &");
     }
@@ -23,6 +25,8 @@ static void handle_idled(void *data, struct ext_idle_notification_v1 *notificati
 static void handle_resumed(void *data, struct ext_idle_notification_v1 *notification) {
     (void)data;
     (void)notification;
+    printf("[idle-daemon] User activity detected -> RESUMED\n");
+    fflush(stdout);
 }
 
 static const struct ext_idle_notification_v1_listener idle_listener = {
@@ -56,7 +60,7 @@ int main(int argc, char **argv) {
 
     display = wl_display_connect(NULL);
     if (!display) {
-        fprintf(stderr, "Failed to connect to Wayland display\n");
+        fprintf(stderr, "[idle-daemon] Failed to connect to Wayland display\n");
         return 1;
     }
 
@@ -65,7 +69,7 @@ int main(int argc, char **argv) {
     wl_display_roundtrip(display);
 
     if (!seat || !idle_notifier) {
-        fprintf(stderr, "Wayland seat or idle notifier not available\n");
+        fprintf(stderr, "[idle-daemon] Wayland seat or idle notifier not available\n");
         wl_display_disconnect(display);
         return 1;
     }
@@ -73,6 +77,9 @@ int main(int argc, char **argv) {
     idle_notification = ext_idle_notifier_v1_get_idle_notification(idle_notifier, timeout_ms, seat);
     ext_idle_notification_v1_add_listener(idle_notification, &idle_listener, NULL);
     wl_display_flush(display);
+
+    printf("[idle-daemon] Started successfully with %u ms timeout\n", timeout_ms);
+    fflush(stdout);
 
     while (wl_display_dispatch(display) != -1) {
     }
