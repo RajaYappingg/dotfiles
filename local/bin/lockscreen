@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import threading
+import math
+import getpass
+import time
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, GtkLayerShell
+import cairo
+
+CSS = b"""
+* {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    outline: none;
+    outline-width: 0px;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+window.lock-window {
+    background-color: rgba(10, 10, 15, 0.45);
+}
+
+.date-label {
+    font-size: 20px;
+    font-weight: 500;
+    color: rgba(240, 240, 250, 0.90);
+    letter-spacing: 1px;
+    margin-top: 4px;
+}
+
+.pass-entry-box {
+    background-color: rgba(230, 230, 235, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.40);
+    border-radius: 9999px;
+    padding: 2px 8px;
+    margin-top: 10px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
+}
+
+.pass-entry {
+    background-color: transparent;
+    border: none;
+    color: #1a1a24;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.lock-icon {
+    font-family: "FiraCode Nerd Font", "JetBrainsMono Nerd Font", sans-serif;
+    color: #222230;
+    font-size: 14px;
+    margin-left: 12px;
+}
+
+.status-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ff4444;
+    margin-top: 12px;
+    min-height: 20px;
+}
+"""
+
+class GradientClock(Gtk.DrawingArea):
+    def __init__(self):
+        super().__init__()
+        self.hours = "00"
+        self.minutes = "00"
+        self.set_size_request(400, 260)
+        self.connect("draw", self.on_draw)
+
+    def set_time(self, h, m):
+        if self.hours != h or self.minutes != m:
+            self.hours = h
+            self.minutes = m
+            self.queue_draw()
+
+    def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+
+        cr.set_antialias(cairo.ANTIALIAS_BEST)
+        cr.select_font_face("Inter", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(130)
+
+        # Draw Hours (Top)
+        extents_h = cr.text_extents(self.hours)
+        x_h = (w - extents_h.width) / 2 - extents_h.x_bearing
+        y_h = 120
+
+        pat_h = cairo.LinearGradient(0, y_h - extents_h.height, 0, y_h)
+        pat_h.add_color_stop_rgba(0.0, 0.95, 0.95, 0.98, 0.95)
+        pat_h.add_color_stop_rgba(1.0, 0.85, 0.87, 0.92, 0.75)
+        cr.set_source(pat_h)
+        cr.move_to(x_h, y_h)
+        cr.show_text(self.hours)
+
+        # Draw Minutes (Bottom)
+        extents_m = cr.text_extents(self.minutes)
+        x_m = (w - extents_m.width) / 2 - extents_m.x_bearing
+        y_m = 245
+
+        pat_m = cairo.LinearGradient(0, y_m - extents_m.height, 0, y_m)
+        pat_m.add_color_stop_rgba(0.0, 0.95, 0.95, 0.98, 0.95)
+        pat_m.add_color_stop_rgba(1.0, 0.85, 0.87, 0.92, 0.75)
+        cr.set_source(pat_m)
+        cr.move_to(x_m, y_m)
+        cr.show_text(self.minutes)
+
+class MinimalAestheticLockScreen(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("Hyprland Lockscreen")
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        if hasattr(GtkLayerShell, "set_keyboard_mode"):
+            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        else:
+            GtkLayerShell.set_keyboard_interactivity(self, True)
+        GtkLayerShell.set_exclusive_zone(self, -1)
+
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+
+        self.get_style_context().add_class("lock-window")
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event", self.on_key_press)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.set_valign(Gtk.Align.CENTER)
+        main_box.set_halign(Gtk.Align.CENTER)
+
+        # 1. Stacked Gradient Clock
+        self.clock_widget = GradientClock()
+        self.clock_widget.set_halign(Gtk.Align.CENTER)
+
+        # 2. Aesthetic Date Label
+        self.lbl_date = Gtk.Label()
+        self.lbl_date.get_style_context().add_class("date-label")
+        self.lbl_date.set_halign(Gtk.Align.CENTER)
+
+        self.update_clock()
+
+        # Spacer between Date and Password Capsule
+        spacer = Gtk.Box()
+        spacer.set_size_request(1, 140)
+
+        # 3. Pill / Capsule Password Entry Box
+        pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        pass_box.get_style_context().add_class("pass-entry-box")
+        pass_box.set_halign(Gtk.Align.CENTER)
+
+        lbl_lock_icon = Gtk.Label(label="󰌾")
+        lbl_lock_icon.get_style_context().add_class("lock-icon")
+
+        self.entry_pass = Gtk.Entry()
+        self.entry_pass.set_visibility(False)
+        self.entry_pass.set_placeholder_text("Enter Password...")
+        self.entry_pass.get_style_context().add_class("pass-entry")
+        self.entry_pass.set_width_chars(20)
+        self.entry_pass.connect("activate", self.on_authenticate)
+
+        pass_box.pack_start(lbl_lock_icon, False, False, 0)
+        pass_box.pack_start(self.entry_pass, False, False, 0)
+
+        # Status Label (for incorrect password feedback)
+        self.lbl_status = Gtk.Label(label="")
+        self.lbl_status.get_style_context().add_class("status-label")
+        self.lbl_status.set_halign(Gtk.Align.CENTER)
+
+        main_box.pack_start(self.clock_widget, False, False, 0)
+        main_box.pack_start(self.lbl_date, False, False, 0)
+        main_box.pack_start(spacer, False, False, 0)
+        main_box.pack_start(pass_box, False, False, 0)
+        main_box.pack_start(self.lbl_status, False, False, 0)
+
+        self.add(main_box)
+
+        self.anim_opacity = 0.0
+        self.set_opacity(0.0)
+        self.is_authenticating = False
+
+        self.show_all()
+        self.entry_pass.grab_focus()
+
+        GLib.timeout_add(1000, self.update_clock)
+        GLib.timeout_add(16, self.animate_fade_in)
+
+    def update_clock(self):
+        h_str = time.strftime("%H")
+        m_str = time.strftime("%M")
+        d_str = time.strftime("%d %B, %Y")
+        self.clock_widget.set_time(h_str, m_str)
+        self.lbl_date.set_text(d_str)
+        return True
+
+    def animate_fade_in(self):
+        self.anim_opacity += 0.08
+        if self.anim_opacity >= 1.0:
+            self.set_opacity(1.0)
+            return False
+        self.set_opacity(self.anim_opacity)
+        return True
+
+    def animate_fade_out_and_quit(self):
+        self.anim_opacity -= 0.1
+        if self.anim_opacity <= 0.0:
+            self.set_opacity(0.0)
+            Gtk.main_quit()
+            return False
+        self.set_opacity(self.anim_opacity)
+        return True
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.entry_pass.set_text("")
+            return True
+        return False
+
+    def on_authenticate(self, widget):
+        if self.is_authenticating:
+            return
+        password = self.entry_pass.get_text()
+        if not password:
+            return
+
+        self.is_authenticating = True
+        self.lbl_status.set_markup("<span foreground='#ffffff'>Authenticating...</span>")
+        self.entry_pass.set_sensitive(False)
+
+        threading.Thread(target=self._verify_password_async, args=(password,), daemon=True).start()
+
+    def _verify_password_async(self, password):
+        success = False
+        try:
+            res = subprocess.run(
+                ["sudo", "-S", "-v"],
+                input=f"{password}\n", text=True, capture_output=True, timeout=5
+            )
+            success = (res.returncode == 0)
+        except Exception:
+            success = False
+
+        GLib.idle_add(self._on_auth_result, success)
+
+    def _on_auth_result(self, success):
+        self.is_authenticating = False
+        self.entry_pass.set_sensitive(True)
+
+        if success:
+            self.lbl_status.set_markup("<span foreground='#00ff99'>✓ Unlocked</span>")
+            GLib.timeout_add(16, self.animate_fade_out_and_quit)
+        else:
+            self.lbl_status.set_markup("<span foreground='#ff4444'>✕ Incorrect password</span>")
+            self.entry_pass.set_text("")
+            self.entry_pass.grab_focus()
+
+def main():
+    app = MinimalAestheticLockScreen()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

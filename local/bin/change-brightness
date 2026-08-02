@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+import os
+import sys
+import glob
+import subprocess
+
+BRIGHTNESS_FILE = "/tmp/.brightness_level"
+
+def get_current_brightness():
+    try:
+        if os.path.exists(BRIGHTNESS_FILE):
+            with open(BRIGHTNESS_FILE, "r") as f:
+                return int(f.read().strip())
+    except Exception:
+        pass
+
+    try:
+        dirs = glob.glob('/sys/class/backlight/*')
+        if dirs:
+            dev = dirs[0]
+            with open(os.path.join(dev, 'brightness'), 'r') as f:
+                curr = int(f.read().strip())
+            with open(os.path.join(dev, 'max_brightness'), 'r') as f:
+                max_b = int(f.read().strip())
+            return int((curr / max_b) * 100)
+    except Exception:
+        pass
+    return 100
+
+def set_brightness(val):
+    val = max(10, min(100, int(val)))
+    try:
+        with open(BRIGHTNESS_FILE, "w") as f:
+            f.write(str(val))
+    except Exception:
+        pass
+
+    # 1. Hardware backlight via brightnessctl
+    try:
+        subprocess.Popen(['brightnessctl', 'set', f'{val}%'])
+    except Exception:
+        pass
+
+    # 2. Systemd logind call
+    try:
+        dirs = glob.glob('/sys/class/backlight/*')
+        for dev in dirs:
+            dev_name = os.path.basename(dev)
+            with open(os.path.join(dev, 'max_brightness'), 'r') as f:
+                max_b = int(f.read().strip())
+            target = max(1, int((val / 100.0) * max_b))
+            subprocess.Popen(['busctl', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1/session/auto', 'org.freedesktop.login1.Session', 'SetBrightness', 'ssu', 'backlight', dev_name, str(target)])
+    except Exception:
+        pass
+
+    # 3. Native Hyprland CTM screen brightness via hyprsunset
+    try:
+        env = os.environ.copy()
+        env['XDG_RUNTIME_DIR'] = f'/run/user/{os.getuid()}'
+        w_disp = subprocess.run('ls /run/user/$UID/wayland-* 2>/dev/null | head -n 1', shell=True, capture_output=True, text=True).stdout.strip()
+        if w_disp:
+            env['WAYLAND_DISPLAY'] = os.path.basename(w_disp)
+
+        sig_dirs = glob.glob(f'/run/user/{os.getuid()}/hypr/*/.socket.sock')
+        if sig_dirs:
+            env['HYPRLAND_INSTANCE_SIGNATURE'] = os.path.basename(os.path.dirname(sig_dirs[0]))
+
+        subprocess.run(['pkill', '-f', 'hyprsunset'], capture_output=True)
+
+        if val < 100:
+            subprocess.Popen(['hyprsunset', '--gamma', str(val)], env=env)
+        else:
+            subprocess.Popen(['hyprsunset', '--identity'], env=env)
+    except Exception:
+        pass
+
+def main():
+    if len(sys.argv) < 2:
+        return
+    arg = sys.argv[1]
+    curr = get_current_brightness()
+    if arg.startswith("+"):
+        diff = int(arg[1:])
+        set_brightness(curr + diff)
+    elif arg.startswith("-"):
+        diff = int(arg[1:])
+        set_brightness(curr - diff)
+    else:
+        try:
+            set_brightness(int(arg))
+        except ValueError:
+            pass
+
+if __name__ == "__main__":
+    main()

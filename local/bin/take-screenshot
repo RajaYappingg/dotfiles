@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Screenshot tool with mouse pointer included (-c)
+
+MODE="${1:-region}"
+FILENAME="$(date +'%Y-%m-%d-%H%M%S_screenshot.png')"
+PICTURES_DIR="$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")"
+SAVEDIR="$PICTURES_DIR/Screenshots"
+mkdir -p "$SAVEDIR"
+FILEPATH="$SAVEDIR/$FILENAME"
+
+case "$MODE" in
+    output)
+        GEOM=$(hyprctl monitors -j | jq -r '.[] | select(.focused == true) | "\(.x),\(.y) \(.width/.scale|round)x\(.height/.scale|round)"')
+        ;;
+    window)
+        GEOM=$(hyprctl clients -j | jq -r '[.[] | select(.workspace.id == '$(hyprctl activeworkspace -j | jq -r '.id')')] | .[] | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1]) \(.title)"' | slurp -r | cut -d' ' -f1,2)
+        ;;
+    region|*)
+        GEOM=$(slurp -d)
+        ;;
+esac
+
+if [ -n "$GEOM" ]; then
+    # -c flag includes the cursor/pointer in the screenshot!
+    grim -c -g "$GEOM" "$FILEPATH"
+    wl-copy < "$FILEPATH"
+    notify-send -a "Screenshot" "󰄄 Screenshot Captured" "Saved to $FILENAME\n󰅍 Copied to clipboard" -i "$FILEPATH"
+fi

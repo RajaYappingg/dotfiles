@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+import subprocess
+import json
+import sys
+
+def get_cpu_usage():
+    try:
+        res = subprocess.run(["top", "-bn1"], capture_output=True, text=True, timeout=2)
+        for line in res.stdout.splitlines():
+            if "Cpu(s)" in line:
+                parts = line.split(",")
+                for p in parts:
+                    if "id" in p:
+                        idle_str = p.strip().split()[0].replace(",", ".")
+                        try:
+                            idle = float(idle_str)
+                            return round(100.0 - idle)
+                        except ValueError:
+                            pass
+    except Exception:
+        pass
+    return 0
+
+def get_top_cpu_processes(limit=5):
+    try:
+        res = subprocess.run(["ps", "aux", "--sort=-%cpu"], capture_output=True, text=True, timeout=2)
+        lines = res.stdout.strip().split("\n")[1:limit+1]
+        procs = []
+        for line in lines:
+            parts = line.split(None, 10)
+            if len(parts) >= 11:
+                cpu = parts[2]
+                cmd = parts[10].split()[0].split("/")[-1]
+                if len(cmd) > 18:
+                    cmd = cmd[:15] + "..."
+                procs.append((cmd, cpu))
+        return procs
+    except Exception:
+        return []
+
+def main():
+    cpu_pct = get_cpu_usage()
+    top_procs = get_top_cpu_processes(5)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "notify":
+        msg = f"Overall CPU: {cpu_pct}%\n\nTop Processes:\n"
+        for cmd, cpu in top_procs:
+            msg += f"• {cmd:<18} {cpu}%\n"
+        subprocess.run(["notify-send", "-a", "Waybar CPU", "CPU Usage Details", msg])
+        return
+
+    proc_lines = []
+    for i, (cmd, cpu) in enumerate(top_procs, 1):
+        proc_lines.append(f"{i}. {cmd:<16} {cpu}%")
+    proc_text = "\n".join(proc_lines)
+
+    tooltip = f"<b>  CPU Usage: {cpu_pct}%</b>\n\n<b>Top Processes (CPU):</b>\n<tt>{proc_text}</tt>\n\n<i>󰍹 Click: Open System Monitor (btop)</i>"
+
+    out = {
+        "text": f"  {cpu_pct}%",
+        "tooltip": tooltip,
+        "class": "cpu"
+    }
+    print(json.dumps(out))
+
+if __name__ == "__main__":
+    main()

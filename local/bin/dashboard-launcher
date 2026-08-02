@@ -1,0 +1,1054 @@
+#!/usr/bin/env python3
+import os
+import sys
+import glob
+import subprocess
+import threading
+import json
+import urllib.request
+import webbrowser
+import math
+import re
+import cairo
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+
+settings = Gtk.Settings.get_default()
+if settings:
+    settings.set_property("gtk-application-prefer-dark-theme", True)
+
+CSS = b"""
+* {
+    font-family: "JetBrains Mono", "Inter", "Sans", sans-serif;
+    outline: none;
+    outline-width: 0px;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+*:focus, listrow:focus, button:focus, entry:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+window.launcher-window {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    color: #ffffff;
+}
+
+window.launcher-window box,
+window.launcher-window scrolledwindow,
+window.launcher-window viewport,
+window.launcher-window list,
+window.launcher-window listrow {
+    background-color: transparent;
+    color: #ffffff;
+}
+
+.sidebar-box {
+    background-color: rgba(0, 0, 0, 0.40);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 16px 10px;
+    border-top-left-radius: 20px;
+    border-bottom-left-radius: 20px;
+}
+
+button.power-btn {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    color: #888888;
+    font-size: 20px;
+    padding: 10px;
+    margin: 4px 0;
+    border-radius: 12px;
+    transition: all 0.2s ease-in-out;
+}
+
+button.power-btn label {
+    color: #888888;
+}
+
+button.power-btn:hover, button.power-btn:focus {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.20);
+    background-image: none;
+}
+
+button.power-btn:hover label, button.power-btn:focus label {
+    color: #ffffff;
+}
+
+.search-entry {
+    background-color: rgba(18, 18, 24, 0.60);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    color: #ffffff;
+    padding: 10px 14px;
+    font-size: 14px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.search-entry:focus {
+    border-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(30, 30, 40, 0.75);
+}
+
+.app-list-box {
+    background: transparent;
+}
+
+listrow {
+    background-color: transparent;
+    border-radius: 12px;
+    margin: 2px 0;
+    padding: 0;
+    transition: all 0.15s ease-in-out;
+}
+
+listrow:selected, listrow:selected:focus, listrow:hover {
+    background-color: #ffffff;
+    background-image: none;
+    border-radius: 12px;
+}
+
+.app-row {
+    background-color: transparent;
+    padding: 8px 12px;
+    border-radius: 12px;
+}
+
+listrow:selected .app-label, listrow:selected:focus .app-label, listrow:hover .app-label {
+    color: #000000;
+    font-weight: bold;
+}
+
+.app-label {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 0.15s ease;
+}
+
+.widget-card {
+    background-color: rgba(12, 12, 18, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 10px;
+}
+
+.weather-temp {
+    font-size: 28px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+.weather-desc {
+    font-size: 12px;
+    color: #cccccc;
+}
+
+.weather-loc {
+    font-size: 11px;
+    color: #888888;
+    margin-top: 8px;
+}
+
+.section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #dddddd;
+    margin-bottom: 6px;
+}
+
+button.fav-btn {
+    background-color: rgba(255, 255, 255, 0.07);
+    background-image: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e0e0e0;
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    transition: all 0.2s ease-in-out;
+}
+
+button.fav-btn label {
+    color: #e0e0e0;
+}
+
+button.fav-btn:hover, button.fav-btn:focus, button.fav-btn:active {
+    background-color: rgba(255, 255, 255, 0.22);
+    background-image: none;
+    border-color: rgba(255, 255, 255, 0.40);
+    color: #ffffff;
+}
+
+.fav-name-label {
+    color: #e0e0e0;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+button.fav-btn:hover .fav-name-label, button.fav-btn:focus .fav-name-label {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.media-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.media-artist {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8899aa;
+    margin-top: 3px;
+}
+
+/* Perfect Circle Controls */
+button.media-ctrl-btn {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    color: #aaaaaa;
+    font-size: 16px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    margin: 0 3px;
+    border-radius: 9999px;
+    transition: all 0.2s ease-in-out;
+}
+
+button.media-ctrl-btn label {
+    color: #aaaaaa;
+}
+
+button.media-ctrl-btn:hover, button.media-ctrl-btn:focus {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+button.media-ctrl-btn:hover label, button.media-ctrl-btn:focus label {
+    color: #ffffff;
+}
+
+/* Perfect Circle Play/Pause Button */
+button.media-ctrl-btn-play {
+    background-color: rgba(255, 255, 255, 0.08);
+    background-image: none;
+    border: 1.5px solid rgba(255, 255, 255, 0.35);
+    color: #ffffff;
+    font-size: 16px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    margin: 0 6px;
+    border-radius: 9999px;
+    transition: all 0.2s ease-in-out;
+}
+
+button.media-ctrl-btn-play label {
+    color: #ffffff;
+}
+
+button.media-ctrl-btn-play:hover, button.media-ctrl-btn-play:focus {
+    background-color: #ffffff;
+    border-color: #ffffff;
+    color: #000000;
+}
+
+button.media-ctrl-btn-play:hover label, button.media-ctrl-btn-play:focus label {
+    color: #000000;
+}
+
+/* Brightness & Volume Slider Controls */
+.slider-icon {
+    font-size: 14px;
+    min-width: 20px;
+}
+
+.slider-val-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #cccccc;
+    min-width: 36px;
+}
+
+scale.bright-scale trough, scale.vol-scale trough {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    min-height: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+scale.bright-scale highlight {
+    background: linear-gradient(90deg, #ffaa00 0%, #ffea00 100%);
+    border-radius: 8px;
+    min-height: 8px;
+}
+
+scale.vol-scale highlight {
+    background: linear-gradient(90deg, #00b4db 0%, #0083b0 100%);
+    border-radius: 8px;
+    min-height: 8px;
+}
+
+scale.bright-scale slider, scale.vol-scale slider {
+    min-width: 14px;
+    min-height: 14px;
+    margin: -3px 0;
+    border-radius: 9999px;
+    background-color: #ffffff;
+    border: none;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+    transition: all 0.15s ease-in-out;
+}
+
+scale.bright-scale slider:hover, scale.vol-scale slider:hover {
+    background-color: #ffffff;
+    min-width: 16px;
+    min-height: 16px;
+    margin: -4px 0;
+}
+"""
+
+def load_apps():
+    apps = []
+    seen = set()
+    dirs = [
+        "/usr/share/applications",
+        "/usr/local/share/applications",
+        "/var/lib/flatpak/exports/share/applications",
+        os.path.expanduser("~/.local/share/applications"),
+        os.path.expanduser("~/.local/share/flatpak/exports/share/applications")
+    ]
+    
+    for d in dirs:
+        if not os.path.exists(d):
+            continue
+        for filepath in glob.glob(os.path.join(d, "*.desktop")):
+            try:
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                
+                name, exec_cmd, icon, nodisplay = None, None, None, False
+                in_entry = False
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line == "[Desktop Entry]":
+                        in_entry = True
+                        continue
+                    elif line.startswith("[") and in_entry:
+                        break
+                    
+                    if in_entry:
+                        if line.startswith("Name=") and not name:
+                            name = line.split("=", 1)[1].strip()
+                        elif line.startswith("Exec=") and not exec_cmd:
+                            exec_cmd = line.split("=", 1)[1].strip()
+                        elif line.startswith("Icon=") and not icon:
+                            icon = line.split("=", 1)[1].strip()
+                        elif line.startswith("NoDisplay=true"):
+                            nodisplay = True
+                
+                if nodisplay or not name or not exec_cmd:
+                    continue
+                
+                clean_exec = []
+                for part in exec_cmd.split():
+                    if not part.startswith("%"):
+                        clean_exec.append(part)
+                exec_str = " ".join(clean_exec)
+                
+                if name not in seen and exec_str:
+                    seen.add(name)
+                    apps.append({
+                        "name": name,
+                        "exec": exec_str,
+                        "icon": icon or "application-x-executable"
+                    })
+            except Exception:
+                pass
+                
+    apps.sort(key=lambda x: x["name"].lower())
+    return apps
+
+def get_brightness():
+    try:
+        if os.path.exists("/tmp/.brightness_level"):
+            with open("/tmp/.brightness_level", "r") as f:
+                return int(f.read().strip()), "software"
+    except Exception:
+        pass
+
+    try:
+        dirs = glob.glob('/sys/class/backlight/*')
+        if dirs:
+            dev = dirs[0]
+            with open(os.path.join(dev, 'brightness'), 'r') as f:
+                curr = int(f.read().strip())
+            with open(os.path.join(dev, 'max_brightness'), 'r') as f:
+                max_b = int(f.read().strip())
+            return int((curr / max_b) * 100), os.path.basename(dev)
+    except Exception:
+        pass
+    return 100, None
+
+def set_brightness(percent):
+    val = int(percent)
+    try:
+        subprocess.Popen(["/home/zaki/.local/bin/change-brightness", str(val)])
+    except Exception:
+        pass
+
+def get_volume():
+    try:
+        res = subprocess.run(['wpctl', 'get-volume', '@DEFAULT_AUDIO_SINK@'], capture_output=True, text=True, timeout=1)
+        out = res.stdout.strip()
+        parts = out.split()
+        if len(parts) >= 2:
+            vol = int(round(float(parts[1]) * 100))
+            muted = '[MUTED]' in out
+            return vol, muted
+    except Exception:
+        pass
+    return 50, False
+
+def set_volume(percent):
+    try:
+        val = max(0, min(100, int(percent)))
+        subprocess.Popen(['wpctl', 'set-volume', '-l', '1.0', '@DEFAULT_AUDIO_SINK@', f'{val}%'])
+    except Exception:
+        pass
+
+class DashboardLauncher(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Dashboard Launcher")
+        self.set_name("launcher-window")
+        self.set_wmclass("custom_launcher", "custom_launcher")
+        
+        self.set_default_size(780, 540)
+        self.set_size_request(580, 420)
+        self.set_resizable(True)
+        self.set_decorated(False)
+        self.current_art_url = None
+        self._updating_sliders = False
+
+        # Enable ARGB Transparency Canvas
+        self.set_app_paintable(True)
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+
+        self.connect("draw", self.on_draw)
+        self.connect("key-press-event", self.on_key_press)
+
+        main_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self.add(main_hbox)
+
+        # 1. Left Power Sidebar
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        sidebar.get_style_context().add_class("sidebar-box")
+        
+        btn_power = Gtk.Button(label="󰐥")
+        btn_power.get_style_context().add_class("power-btn")
+        btn_power.set_tooltip_text("Shutdown")
+        btn_power.connect("clicked", lambda b: self.exec_action(["systemctl", "poweroff"]))
+
+        btn_reboot = Gtk.Button(label="󰜉")
+        btn_reboot.get_style_context().add_class("power-btn")
+        btn_reboot.set_tooltip_text("Reboot")
+        btn_reboot.connect("clicked", lambda b: self.exec_action(["systemctl", "reboot"]))
+
+        btn_lock = Gtk.Button(label="󰌾")
+        btn_lock.get_style_context().add_class("power-btn")
+        btn_lock.set_tooltip_text("Lock Screen")
+        btn_lock.connect("clicked", lambda b: self.exec_action(["hyprlock"] if os.path.exists("/usr/bin/hyprlock") else ["loginctl", "lock-session"]))
+
+        sidebar.pack_start(btn_power, False, False, 0)
+        sidebar.pack_start(btn_reboot, False, False, 0)
+        sidebar.pack_start(btn_lock, False, False, 0)
+
+        avatar = Gtk.Label(label="󰀉")
+        avatar.get_style_context().add_class("power-btn")
+        sidebar.pack_end(avatar, False, False, 0)
+
+        main_hbox.pack_start(sidebar, False, False, 0)
+
+        # 2. Center Applications Panel
+        center_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        center_vbox.set_size_request(240, -1)
+        center_vbox.set_margin_top(14)
+        center_vbox.set_margin_bottom(14)
+        center_vbox.set_margin_start(14)
+        center_vbox.set_margin_end(14)
+
+        self.search_entry = Gtk.Entry()
+        self.search_entry.set_placeholder_text("Search apps...")
+        self.search_entry.get_style_context().add_class("search-entry")
+        self.search_entry.connect("changed", self.on_search_changed)
+        self.search_entry.connect("activate", self.on_search_activate)
+        center_vbox.pack_start(self.search_entry, False, False, 0)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        self.listbox = Gtk.ListBox()
+        self.listbox.get_style_context().add_class("app-list-box")
+        self.listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.listbox.connect("row-activated", self.on_app_activated)
+        scrolled.add(self.listbox)
+
+        center_vbox.pack_start(scrolled, True, True, 0)
+        main_hbox.pack_start(center_vbox, True, True, 0)
+
+        # 3. Right Widgets Panel
+        right_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        right_vbox.set_size_request(270, -1)
+        right_vbox.set_valign(Gtk.Align.START)
+        right_vbox.set_margin_top(14)
+        right_vbox.set_margin_bottom(14)
+        right_vbox.set_margin_start(6)
+        right_vbox.set_margin_end(14)
+
+        # Widget 1: Weather
+        weather_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        weather_card.get_style_context().add_class("widget-card")
+
+        self.lbl_temp = Gtk.Label(label="--°C")
+        self.lbl_temp.set_halign(Gtk.Align.START)
+        self.lbl_temp.get_style_context().add_class("weather-temp")
+
+        self.lbl_desc = Gtk.Label(label="Loading weather...")
+        self.lbl_desc.set_halign(Gtk.Align.START)
+        self.lbl_desc.get_style_context().add_class("weather-desc")
+
+        self.lbl_loc = Gtk.Label(label="Local Weather")
+        self.lbl_loc.set_halign(Gtk.Align.START)
+        self.lbl_loc.get_style_context().add_class("weather-loc")
+
+        weather_card.pack_start(self.lbl_temp, False, False, 0)
+        weather_card.pack_start(self.lbl_desc, False, False, 0)
+        weather_card.pack_start(self.lbl_loc, False, False, 0)
+
+        right_vbox.pack_start(weather_card, False, False, 0)
+
+        # Widget 2: Favourite Sites (Compact 2-Column Grid)
+        fav_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        fav_card.get_style_context().add_class("widget-card")
+
+        lbl_fav = Gtk.Label(label="Favourite Sites")
+        lbl_fav.set_halign(Gtk.Align.START)
+        lbl_fav.get_style_context().add_class("section-title")
+        fav_card.pack_start(lbl_fav, False, False, 0)
+
+        grid = Gtk.Grid()
+        grid.set_column_spacing(6)
+        grid.set_row_spacing(6)
+        grid.set_column_homogeneous(True)
+
+        sites = [
+            ("󰣇", "Arch Linux", "https://archlinux.org", "#1793D1", 0, 0),
+            ("󰎆", "YT Music", "https://music.youtube.com", "#FF0033", 1, 0),
+            ("󰑍", "Reddit", "https://reddit.com", "#FF4500", 0, 1),
+            ("󰗃", "YouTube", "https://youtube.com", "#FF0000", 1, 1)
+        ]
+
+        for icon_char, name, url, color, col, row in sites:
+            btn = Gtk.Button()
+            btn.get_style_context().add_class("fav-btn")
+
+            btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            btn_box.set_halign(Gtk.Align.START)
+            btn_box.set_margin_start(4)
+            btn_box.set_margin_end(4)
+            
+            lbl_icon = Gtk.Label()
+            lbl_icon.set_markup(f"<span foreground='{color}' font='13'>{icon_char}</span>")
+            
+            lbl_name = Gtk.Label(label=name)
+            lbl_name.get_style_context().add_class("fav-name-label")
+
+            btn_box.pack_start(lbl_icon, False, False, 0)
+            btn_box.pack_start(lbl_name, False, False, 0)
+
+            btn.add(btn_box)
+            btn.connect("clicked", lambda b, u=url: self.open_url(u))
+            grid.attach(btn, col, row, 1, 1)
+
+        fav_card.pack_start(grid, False, False, 0)
+        right_vbox.pack_start(fav_card, False, False, 0)
+
+        # Widget 3: Media Player Widget (Title & Controls Only)
+        media_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        media_card.get_style_context().add_class("widget-card")
+
+        self.lbl_media_title = Gtk.Label(label="NO MEDIA PLAYING")
+        self.lbl_media_title.set_halign(Gtk.Align.CENTER)
+        self.lbl_media_title.set_ellipsize(3)
+        self.lbl_media_title.get_style_context().add_class("media-title")
+
+        self.lbl_media_artist = Gtk.Label(label="PLAYERCTL")
+        self.lbl_media_artist.set_halign(Gtk.Align.CENTER)
+        self.lbl_media_artist.set_ellipsize(3)
+        self.lbl_media_artist.get_style_context().add_class("media-artist")
+
+        ctrl_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ctrl_hbox.set_halign(Gtk.Align.CENTER)
+        ctrl_hbox.set_margin_top(4)
+
+        btn_prev = Gtk.Button(label="⏮")
+        btn_prev.set_halign(Gtk.Align.CENTER)
+        btn_prev.set_valign(Gtk.Align.CENTER)
+        btn_prev.get_style_context().add_class("media-ctrl-btn")
+        btn_prev.connect("clicked", lambda b: self.media_cmd(["playerctl", "previous"]))
+
+        self.btn_play = Gtk.Button(label="󰏤")
+        self.btn_play.set_halign(Gtk.Align.CENTER)
+        self.btn_play.set_valign(Gtk.Align.CENTER)
+        self.btn_play.get_style_context().add_class("media-ctrl-btn-play")
+        self.btn_play.connect("clicked", lambda b: self.media_cmd(["playerctl", "play-pause"]))
+
+        btn_next = Gtk.Button(label="⏭")
+        btn_next.set_halign(Gtk.Align.CENTER)
+        btn_next.set_valign(Gtk.Align.CENTER)
+        btn_next.get_style_context().add_class("media-ctrl-btn")
+        btn_next.connect("clicked", lambda b: self.media_cmd(["playerctl", "next"]))
+
+        ctrl_hbox.pack_start(btn_prev, False, False, 0)
+        ctrl_hbox.pack_start(self.btn_play, False, False, 0)
+        ctrl_hbox.pack_start(btn_next, False, False, 0)
+
+        media_card.pack_start(self.lbl_media_title, False, False, 0)
+        media_card.pack_start(self.lbl_media_artist, False, False, 0)
+        media_card.pack_start(ctrl_hbox, False, False, 0)
+
+        right_vbox.pack_start(media_card, False, False, 0)
+
+        # Widget 4: Brightness & Volume Controls Card
+        controls_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        controls_card.get_style_context().add_class("widget-card")
+
+        # Row 1: Brightness Control
+        bright_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        lbl_bright_icon = Gtk.Label()
+        lbl_bright_icon.set_markup("<span foreground='#ffbb33' font='13'>󰃠</span>")
+        lbl_bright_icon.get_style_context().add_class("slider-icon")
+
+        self.scale_bright = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 5, 100, 1)
+        self.scale_bright.set_draw_value(False)
+        self.scale_bright.get_style_context().add_class("bright-scale")
+        self.scale_bright.connect("value-changed", self.on_bright_slider_changed)
+
+        self.lbl_bright_val = Gtk.Label(label="100%")
+        self.lbl_bright_val.set_halign(Gtk.Align.END)
+        self.lbl_bright_val.get_style_context().add_class("slider-val-label")
+
+        bright_box.pack_start(lbl_bright_icon, False, False, 0)
+        bright_box.pack_start(self.scale_bright, True, True, 0)
+        bright_box.pack_start(self.lbl_bright_val, False, False, 0)
+
+        # Row 2: Volume Control
+        vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        self.lbl_vol_icon = Gtk.Label()
+        self.lbl_vol_icon.set_markup("<span foreground='#00d2ff' font='13'>󰕾</span>")
+        self.lbl_vol_icon.get_style_context().add_class("slider-icon")
+
+        self.scale_vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.scale_vol.set_draw_value(False)
+        self.scale_vol.get_style_context().add_class("vol-scale")
+        self.scale_vol.connect("value-changed", self.on_vol_slider_changed)
+
+        self.lbl_vol_val = Gtk.Label(label="100%")
+        self.lbl_vol_val.set_halign(Gtk.Align.END)
+        self.lbl_vol_val.get_style_context().add_class("slider-val-label")
+
+        vol_box.pack_start(self.lbl_vol_icon, False, False, 0)
+        vol_box.pack_start(self.scale_vol, True, True, 0)
+        vol_box.pack_start(self.lbl_vol_val, False, False, 0)
+
+        controls_card.pack_start(bright_box, False, False, 0)
+        controls_card.pack_start(vol_box, False, False, 0)
+
+        right_vbox.pack_start(controls_card, False, False, 0)
+
+        main_hbox.pack_start(right_vbox, False, False, 0)
+
+        self.all_apps = load_apps()
+        self.populate_apps(self.all_apps)
+
+        # Set default placeholder cover art initially
+        self.set_placeholder_art()
+        self.update_sliders()
+
+        threading.Thread(target=self.fetch_weather, daemon=True).start()
+        GLib.timeout_add(1000, self.update_media)
+
+    def set_placeholder_art(self):
+        pass
+
+    def on_draw(self, widget, cr):
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        r = 20
+
+        cr.new_sub_path()
+        cr.arc(w - r, r, r, -1.5707963267948966, 0)
+        cr.arc(w - r, h - r, r, 0, 1.5707963267948966)
+        cr.arc(r, h - r, r, 1.5707963267948966, 3.141592653589793)
+        cr.arc(r, r, r, 3.141592653589793, 4.71238898038469)
+        cr.close_path()
+
+        # Translucent AMOLED Dark (50% Alpha)
+        cr.set_source_rgba(0.02, 0.02, 0.04, 0.50)
+        cr.fill_preserve()
+
+        # Glowing border
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.15)
+        cr.set_line_width(1.5)
+        cr.stroke()
+
+        return False
+
+    def populate_apps(self, app_list):
+        for child in self.listbox.get_children():
+            self.listbox.remove(child)
+
+        icon_theme = Gtk.IconTheme.get_default()
+
+        for app in app_list:
+            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            row_box.get_style_context().add_class("app-row")
+
+            img = Gtk.Image()
+            img.set_pixel_size(24)
+            if icon_theme.has_icon(app["icon"]):
+                img.set_from_icon_name(app["icon"], Gtk.IconSize.DND)
+            else:
+                img.set_from_icon_name("application-x-executable", Gtk.IconSize.DND)
+            row_box.pack_start(img, False, False, 0)
+
+            lbl = Gtk.Label(label=app["name"])
+            lbl.get_style_context().add_class("app-label")
+            row_box.pack_start(lbl, False, False, 0)
+
+            row = Gtk.ListBoxRow()
+            row.app_exec = app["exec"]
+            row.add(row_box)
+            
+            row.connect("enter-notify-event", self.on_row_enter)
+            
+            self.listbox.add(row)
+
+        self.listbox.show_all()
+        first_row = self.listbox.get_row_at_index(0)
+        if first_row:
+            self.listbox.select_row(first_row)
+
+    def on_row_enter(self, row, event):
+        self.listbox.select_row(row)
+
+    def on_search_changed(self, entry):
+        query = entry.get_text().strip().lower()
+        if not query:
+            filtered = self.all_apps
+        else:
+            filtered = [a for a in self.all_apps if query in a["name"].lower() or query in a["exec"].lower()]
+        self.populate_apps(filtered)
+
+    def on_search_activate(self, entry):
+        selected_row = self.listbox.get_selected_row()
+        if selected_row:
+            self.launch_app(selected_row.app_exec)
+
+    def on_app_activated(self, listbox, row):
+        if row:
+            self.launch_app(row.app_exec)
+
+    def exec_action(self, cmd_args):
+        self.close_launcher()
+        subprocess.Popen(cmd_args)
+
+    def launch_app(self, exec_cmd):
+        self.close_launcher()
+        subprocess.Popen(exec_cmd, shell=True)
+
+    def open_url(self, url):
+        self.close_launcher()
+        webbrowser.open(url)
+
+    def close_launcher(self):
+        self.destroy()
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close_launcher()
+            return True
+        elif event.keyval == Gdk.KEY_Down:
+            selected = self.listbox.get_selected_row()
+            if selected:
+                idx = selected.get_index()
+                next_row = self.listbox.get_row_at_index(idx + 1)
+                if next_row:
+                    self.listbox.select_row(next_row)
+            return True
+        elif event.keyval == Gdk.KEY_Up:
+            selected = self.listbox.get_selected_row()
+            if selected:
+                idx = selected.get_index()
+                if idx > 0:
+                    prev_row = self.listbox.get_row_at_index(idx - 1)
+                    if prev_row:
+                        self.listbox.select_row(prev_row)
+            return True
+        return False
+
+    def fetch_weather(self):
+        try:
+            req = urllib.request.Request("http://wttr.in/Magelang,Indonesia?format=j1", headers={"User-Agent": "curl/7.68.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                cond = data["current_condition"][0]
+                temp = f"{cond['temp_C']}°C"
+                feels = f"Feels like {cond['FeelsLikeC']}°C"
+                loc = "Magelang, Jawa Tengah"
+
+                GLib.idle_add(self.lbl_temp.set_text, temp)
+                GLib.idle_add(self.lbl_desc.set_text, feels)
+                GLib.idle_add(self.lbl_loc.set_text, loc)
+        except Exception:
+            GLib.idle_add(self.lbl_temp.set_text, "17°C")
+            GLib.idle_add(self.lbl_desc.set_text, "Feels like 19°C")
+            GLib.idle_add(self.lbl_loc.set_text, "Magelang, Jawa Tengah")
+
+    def media_cmd(self, cmd):
+        # Optimistic UI update for Play/Pause toggle
+        if "play-pause" in cmd:
+            curr = self.btn_play.get_label()
+            self.btn_play.set_label("󰐊" if curr == "󰏤" else "󰏤")
+        threading.Thread(target=self._async_media_cmd, args=(cmd,), daemon=True).start()
+
+    def _async_media_cmd(self, cmd):
+        try:
+            subprocess.run(cmd, timeout=2)
+        except Exception:
+            pass
+        self._async_fetch_media()
+
+    def on_bright_slider_changed(self, scale):
+        if self._updating_sliders:
+            return
+        val = int(scale.get_value())
+        self.lbl_bright_val.set_text(f"{val}%")
+        set_brightness(val)
+
+    def on_vol_slider_changed(self, scale):
+        if self._updating_sliders:
+            return
+        val = int(scale.get_value())
+        self.lbl_vol_val.set_text(f"{val}%")
+        if val == 0:
+            self.lbl_vol_icon.set_markup("<span foreground='#ff5555' font='13'>󰝟</span>")
+        else:
+            self.lbl_vol_icon.set_markup("<span foreground='#00d2ff' font='13'>󰕾</span>")
+        set_volume(val)
+
+    def update_sliders(self):
+        curr_bright, _ = get_brightness()
+        curr_vol, muted = get_volume()
+        
+        self._updating_sliders = True
+        try:
+            self.scale_bright.set_value(curr_bright)
+            self.lbl_bright_val.set_text(f"{curr_bright}%")
+
+            self.scale_vol.set_value(curr_vol)
+            self.lbl_vol_val.set_text(f"{curr_vol}%")
+            if muted or curr_vol == 0:
+                self.lbl_vol_icon.set_markup("<span foreground='#ff5555' font='13'>󰝟</span>")
+            else:
+                self.lbl_vol_icon.set_markup("<span foreground='#00d2ff' font='13'>󰕾</span>")
+        finally:
+            self._updating_sliders = False
+
+    def update_media(self):
+        threading.Thread(target=self._async_fetch_media, daemon=True).start()
+        self.update_sliders()
+        return True
+
+    def _async_fetch_media(self):
+        try:
+            res = subprocess.run(
+                ["playerctl", "metadata", "--format", "{{status}}||{{title}}||{{artist}}||{{mpris:artUrl}}||{{xesam:url}}"],
+                capture_output=True, text=True, timeout=2
+            )
+            out = res.stdout.strip()
+            if not out or "||" not in out:
+                GLib.idle_add(self._apply_media_info, "NO MEDIA PLAYING", "PLAYERCTL", "Stopped", "", "")
+                return
+
+            parts = out.split("||")
+            status = parts[0] if len(parts) > 0 else ""
+            title = parts[1].upper() if len(parts) > 1 and parts[1] else "NO MEDIA PLAYING"
+            artist = parts[2].upper() if len(parts) > 2 and parts[2] else "PLAYERCTL"
+            art_url = parts[3] if len(parts) > 3 else ""
+            song_url = parts[4] if len(parts) > 4 else ""
+
+            GLib.idle_add(self._apply_media_info, title, artist, status, art_url, song_url)
+        except Exception:
+            pass
+
+    def _apply_media_info(self, title, artist, status, art_url="", song_url=""):
+        self.lbl_media_title.set_text(title)
+        self.lbl_media_artist.set_text(artist)
+
+        if status == "Playing":
+            self.btn_play.set_label("󰏤")
+        else:
+            self.btn_play.set_label("󰐊")
+
+    def load_album_art(self, art_target):
+        try:
+            local_path = None
+            if art_target.startswith("file://"):
+                local_path = art_target[7:]
+            elif art_target.startswith("http://") or art_target.startswith("https://"):
+                local_path = "/tmp/launcher_album_art.jpg"
+                req = urllib.request.Request(art_target, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+                with urllib.request.urlopen(req, timeout=5) as resp, open(local_path, "wb") as f:
+                    f.write(resp.read())
+
+            if local_path and os.path.exists(local_path):
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(local_path)
+                hd_rounded = crop_rounded_pixbuf(pixbuf, size=120, radius=16)
+                GLib.idle_add(self.album_art_img.set_from_pixbuf, hd_rounded)
+                GLib.idle_add(self.album_art_img.show)
+            else:
+                self.set_placeholder_art()
+        except Exception:
+            self.set_placeholder_art()
+
+def get_hd_art_target(art_url, song_url, title=""):
+    # 1. Search YouTube Video ID from song_url
+    if song_url and ("youtube.com/watch" in song_url or "youtu.be/" in song_url):
+        m = re.search(r'v=([a-zA-Z0-9_-]{11})', song_url) or re.search(r'youtu\.be/([a-zA-Z0-9_-]{11})', song_url)
+        if m:
+            video_id = m.group(1)
+            # Check available Youtube resolutions (maxresdefault -> sddefault -> hqdefault)
+            for fmt in ["maxresdefault.jpg", "sddefault.jpg", "hqdefault.jpg"]:
+                u = f"https://i.ytimg.com/vi/{video_id}/{fmt}"
+                try:
+                    req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=2) as resp:
+                        if resp.status == 200:
+                            return u
+                except Exception:
+                    continue
+
+    # 2. Fallback to MPRIS art_url if valid
+    if art_url:
+        return art_url
+
+    return None
+
+def create_placeholder_pixbuf(size=120, radius=16):
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+    cr = cairo.Context(surface)
+
+    # Rounded path clip
+    cr.new_sub_path()
+    cr.arc(size - radius, radius, radius, -1.5707963267948966, 0)
+    cr.arc(size - radius, size - radius, radius, 0, 1.5707963267948966)
+    cr.arc(radius, size - radius, radius, 1.5707963267948966, 3.141592653589793)
+    cr.arc(radius, radius, radius, 3.141592653589793, 4.71238898038469)
+    cr.close_path()
+    cr.clip()
+
+    # Dark cyan/violet gradient
+    grad = cairo.LinearGradient(0, 0, size, size)
+    grad.add_color_stop_rgba(0, 0.10, 0.16, 0.26, 1.0)
+    grad.add_color_stop_rgba(1, 0.04, 0.06, 0.12, 1.0)
+    cr.set_source(grad)
+    cr.paint()
+
+    # Subtle glowing music note icon in center
+    cr.select_font_face("JetBrains Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+    cr.set_font_size(44)
+    cr.set_source_rgba(0.2, 0.8, 1.0, 0.85)
+    extents = cr.text_extents("󰎆")
+    cr.move_to((size - extents.width)/2 - extents.x_bearing, (size - extents.height)/2 - extents.y_bearing)
+    cr.show_text("󰎆")
+
+    return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+def crop_rounded_pixbuf(pixbuf, size=120, radius=16):
+    w = pixbuf.get_width()
+    h = pixbuf.get_height()
+    
+    top, bottom = 0, h - 1
+    if w == 1280 and h == 720:
+        top, bottom = 90, 629
+    elif w == 640 and h == 480:
+        top, bottom = 60, 419
+    elif w == 480 and h == 360:
+        top, bottom = 45, 314
+
+    content_h = bottom - top + 1
+    crop_size = min(w, content_h)
+    src_x = (w - crop_size) // 2
+    src_y = top + (content_h - crop_size) // 2
+
+    square_pixbuf = pixbuf.new_subpixbuf(src_x, src_y, crop_size, crop_size)
+    scaled = square_pixbuf.scale_simple(size, size, GdkPixbuf.InterpType.HYPER)
+    
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+    cr = cairo.Context(surface)
+    
+    cr.new_sub_path()
+    cr.arc(size - radius, radius, radius, -1.5707963267948966, 0)
+    cr.arc(size - radius, size - radius, radius, 0, 1.5707963267948966)
+    cr.arc(radius, size - radius, radius, 1.5707963267948966, 3.141592653589793)
+    cr.arc(radius, radius, radius, 3.141592653589793, 4.71238898038469)
+    cr.close_path()
+    cr.clip()
+    
+    Gdk.cairo_set_source_pixbuf(cr, scaled, 0, 0)
+    cr.paint()
+    
+    return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+def main():
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(),
+        css_provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+
+    app = DashboardLauncher()
+    app.show_all()
+    app.search_entry.grab_focus()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

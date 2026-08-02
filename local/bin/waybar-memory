@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+import subprocess
+import json
+import sys
+
+def get_mem_info():
+    used_gib = 0.0
+    total_gib = 0.0
+    mem_pct = 0
+    try:
+        with open("/proc/meminfo", "r") as f:
+            lines = f.readlines()
+        mem_data = {}
+        for line in lines:
+            parts = line.split(":")
+            if len(parts) == 2:
+                key = parts[0].strip()
+                val = parts[1].strip().split()[0]
+                mem_data[key] = int(val)
+        total_kb = mem_data.get("MemTotal", 1)
+        avail_kb = mem_data.get("MemAvailable", 0)
+        used_kb = total_kb - avail_kb
+
+        total_gib = total_kb / (1024 * 1024)
+        used_gib = used_kb / (1024 * 1024)
+        mem_pct = round((used_kb / total_kb) * 100)
+    except Exception:
+        pass
+    return used_gib, total_gib, mem_pct
+
+def get_top_mem_processes(limit=5):
+    try:
+        res = subprocess.run(["ps", "aux", "--sort=-%mem"], capture_output=True, text=True, timeout=2)
+        lines = res.stdout.strip().split("\n")[1:limit+1]
+        procs = []
+        for line in lines:
+            parts = line.split(None, 10)
+            if len(parts) >= 11:
+                mem_pct = parts[3]
+                rss_mb = round(int(parts[5]) / 1024)
+                cmd = parts[10].split()[0].split("/")[-1]
+                if len(cmd) > 16:
+                    cmd = cmd[:13] + "..."
+                procs.append((cmd, rss_mb, mem_pct))
+        return procs
+    except Exception:
+        return []
+
+def main():
+    used_gib, total_gib, mem_pct = get_mem_info()
+    top_procs = get_top_mem_processes(5)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "notify":
+        msg = f"RAM Used: {used_gib:.1f} GiB / {total_gib:.1f} GiB ({mem_pct}%)\n\nTop RAM Processes:\n"
+        for cmd, rss, pct in top_procs:
+            msg += f"• {cmd:<16} {rss}MB ({pct}%)\n"
+        subprocess.run(["notify-send", "-a", "Waybar RAM", "RAM Usage Details", msg])
+        return
+
+    proc_lines = []
+    for i, (cmd, rss, pct) in enumerate(top_procs, 1):
+        proc_lines.append(f"{i}. {cmd:<14} {rss:>5}MB ({pct}%)")
+    proc_text = "\n".join(proc_lines)
+
+    tooltip = f"<b>  RAM Used: {used_gib:.1f} GiB / {total_gib:.1f} GiB ({mem_pct}%)</b>\n\n<b>Top Processes (RAM):</b>\n<tt>{proc_text}</tt>\n\n<i>󰍹 Click: Open System Monitor (btop)</i>"
+
+    out = {
+        "text": f"  {mem_pct}%",
+        "tooltip": tooltip,
+        "class": "memory"
+    }
+    print(json.dumps(out))
+
+if __name__ == "__main__":
+    main()

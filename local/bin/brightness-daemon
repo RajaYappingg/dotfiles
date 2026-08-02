@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+import os
+import sys
+import glob
+import subprocess
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gtk, Gdk, GLib
+import cairo
+
+BRIGHTNESS_FILE = "/tmp/.brightness_level"
+
+def get_saved_brightness():
+    try:
+        if os.path.exists(BRIGHTNESS_FILE):
+            with open(BRIGHTNESS_FILE, "r") as f:
+                return int(f.read().strip())
+    except Exception:
+        pass
+    return 100
+
+def try_hardware_brightness(percent):
+    try:
+        dirs = glob.glob('/sys/class/backlight/*')
+        for dev in dirs:
+            dev_name = os.path.basename(dev)
+            with open(os.path.join(dev, 'max_brightness'), 'r') as f:
+                max_b = int(f.read().strip())
+            target = max(1, int((percent / 100.0) * max_b))
+            subprocess.Popen(['busctl', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1/session/auto', 'org.freedesktop.login1.Session', 'SetBrightness', 'ssu', 'backlight', dev_name, str(target)])
+    except Exception:
+        pass
+
+class SoftwareDimmer(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.POPUP)
+        self.set_app_paintable(True)
+        self.set_title("BrightnessOverlay")
+        self.set_keep_above(True)
+
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+
+        self.brightness = get_saved_brightness()
+
+        self.connect("draw", self.on_draw)
+        self.fullscreen()
+        self.realize()
+
+        # Pass through all user inputs (mouse, keyboard, touches) to underlying windows
+        gdk_win = self.get_window()
+        if gdk_win:
+            gdk_win.set_pass_through(True)
+
+        GLib.timeout_add(100, self.check_file_update)
+
+    def on_draw(self, widget, cr):
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+
+        # Smooth dark dimming overlay when brightness < 100%
+        # At 100% -> alpha 0.0 (completely clear)
+        # At 10%  -> alpha ~0.80 (dimmed dark)
+        alpha = max(0.0, min(0.85, (100.0 - self.brightness) / 100.0 * 0.88))
+        cr.set_source_rgba(0.0, 0.0, 0.0, alpha)
+        cr.paint()
+        return False
+
+    def check_file_update(self):
+        val = get_saved_brightness()
+        if val != self.brightness:
+            self.brightness = val
+            self.queue_draw()
+            try_hardware_brightness(val)
+        return True
+
+def main():
+    # Ensure single instance
+    lock_file = "/tmp/.brightness_daemon.lock"
+    try:
+        import fcntl
+        fp = open(lock_file, "w")
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except Exception:
+        sys.exit(0)
+
+    app = SoftwareDimmer()
+    app.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

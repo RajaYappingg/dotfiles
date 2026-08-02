@@ -1,0 +1,113 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 30,
+    "spacing": 3,
+    "margin-top": 4,
+    "margin-left": 10,
+    "margin-right": 10,
+
+    "modules-left": [
+        "hyprland/workspaces",
+        "hyprland/window"
+    ],
+    "modules-center": [
+        "clock"
+    ],
+    "modules-right": [
+        "custom/cpu",
+        "custom/memory",
+        "custom/temperature",
+        "network",
+        "pulseaudio",
+        "battery",
+        "tray"
+    ],
+
+    "hyprland/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name}",
+        "on-click": "activate"
+    },
+
+    "hyprland/window": {
+        "format": "{}",
+        "max-length": 25,
+        "separate-outputs": true
+    },
+
+    "clock": {
+        "timezone": "Asia/Jakarta",
+        "format": "󰥔  {:%H:%M  •  %a, %d %b}",
+        "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+        "on-click": "notify-send '📅 Calendar' \"$(cal)\""
+    },
+
+    "custom/cpu": {
+        "exec": "/home/zaki/.local/bin/waybar-cpu",
+        "return-type": "json",
+        "interval": 2,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-cpu notify"
+    },
+
+    "custom/memory": {
+        "exec": "/home/zaki/.local/bin/waybar-memory",
+        "return-type": "json",
+        "interval": 3,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-memory notify"
+    },
+
+    "custom/temperature": {
+        "exec": "/home/zaki/.local/bin/waybar-temp",
+        "return-type": "json",
+        "interval": 3,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-temp notify"
+    },
+
+    "network": {
+        "format-wifi": "󰤨  {essid}",
+        "format-ethernet": "󰈀  {ipaddr}",
+        "format-linked": "󰈀  {ifname} (No IP)",
+        "format-disconnected": "󰤭  Offline",
+        "tooltip-format": "󰩟 {ifname} via {gwaddr}",
+        "on-click": "kitty --class floating_wifi -e /home/zaki/.local/bin/wifi-menu",
+        "interval": 5
+    },
+
+    "pulseaudio": {
+        "format": "{icon}  {volume}%",
+        "format-muted": "󰝟  Muted",
+        "format-icons": {
+            "headphone": "",
+            "default": ["󰕿", "󰖀", "󰕾"]
+        },
+        "tooltip-format": "Volume: {volume}%\nClick: Audio Control Menu",
+        "on-click": "kitty --class floating_vol -e /home/zaki/.local/bin/volume-menu",
+        "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+    },
+
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon}  {capacity}%",
+        "format-charging": "󰂄  {capacity}%",
+        "format-plugged": "  {capacity}%",
+        "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+        "tooltip-format": "Battery: {capacity}%\nClick: Battery Details",
+        "on-click": "/home/zaki/.local/bin/battery-info"
+    },
+
+    "tray": {
+        "icon-size": 13,
+        "spacing": 8
+    }
+}

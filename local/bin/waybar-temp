@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+import subprocess
+import json
+import os
+import sys
+
+def get_temp():
+    temp_c = 0
+    try:
+        for zone in range(5):
+            path = f"/sys/class/thermal/thermal_zone{zone}/temp"
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    t = int(f.read().strip()) // 1000
+                    if t > temp_c:
+                        temp_c = t
+    except Exception:
+        pass
+    return temp_c
+
+def main():
+    t = get_temp()
+    if t == 0:
+        t = 45
+
+    status = "Normal"
+    if t >= 80:
+        status = "CRITICAL (High)"
+    elif t >= 70:
+        status = "Warning (Warm)"
+
+    if len(sys.argv) > 1 and sys.argv[1] == "notify":
+        subprocess.run(["notify-send", "-a", "Waybar Temperature", "Thermal Status", f"CPU Temperature: {t}°C\nStatus: {status}"])
+        return
+
+    tooltip = f"<b>  CPU Temperature: {t}°C</b>\nStatus: {status}\n\n<i>󰍹 Click: Open System Monitor (btop)</i>"
+    out = {
+        "text": f"  {t}°C",
+        "tooltip": tooltip,
+        "class": "temperature"
+    }
+    print(json.dumps(out))
+
+if __name__ == "__main__":
+    main()

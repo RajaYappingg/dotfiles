@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+import subprocess
+
+def main():
+    try:
+        res = subprocess.run(["upower", "-i", "/org/freedesktop/UPower/devices/battery_BAT1"], capture_output=True, text=True)
+        lines = res.stdout.splitlines()
+        info = {}
+        for line in lines:
+            if ":" in line:
+                k, v = line.split(":", 1)
+                info[k.strip()] = v.strip()
+
+        state = info.get("state", "Unknown").capitalize()
+        pct = info.get("percentage", "N/A")
+        health = info.get("capacity", "N/A")
+        energy = info.get("energy", "N/A")
+        energy_full = info.get("energy-full", "N/A")
+        energy_design = info.get("energy-full-design", "N/A")
+        voltage = info.get("voltage", "N/A")
+
+        msg = (
+            f"🔋 State: {state}\n"
+            f"⚡ Charge: {pct}\n"
+            f"💖 Health: {health}\n"
+            f"🔌 Voltage: {voltage}\n"
+            f"📊 Energy: {energy} / {energy_full} (Design: {energy_design})"
+        )
+        subprocess.run(["notify-send", "-a", "Battery Detail", "🔋 Battery Information", msg])
+    except Exception as e:
+        subprocess.run(["notify-send", "Battery Info Error", str(e)])
+
+if __name__ == "__main__":
+    main()
