@@ -660,11 +660,30 @@ class MinimalAestheticLockScreen(Gtk.Window):
             self.fx_overlay.trigger_red_flash()
             self.red_shake_start = time.time()
 
+LOCKSCREEN_PID = "/tmp/lockscreen.pid"
+
 def main():
+    if os.path.exists(LOCKSCREEN_PID):
+        try:
+            with open(LOCKSCREEN_PID, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            return
+        except Exception:
+            pass
+
+    with open(LOCKSCREEN_PID, "w") as f:
+        f.write(str(os.getpid()))
+
     try:
         app = MinimalAestheticLockScreen()
         Gtk.main()
     finally:
+        if os.path.exists(LOCKSCREEN_PID):
+            try:
+                os.remove(LOCKSCREEN_PID)
+            except Exception:
+                pass
         try:
             subprocess.run(["hyprctl", "eval", "hl.dispatch(hl.dsp.submap('reset'))"], check=False)
         except Exception:
