@@ -9,14 +9,12 @@ import subprocess
 import urllib.parse
 import urllib.request
 import re
-import math
 import gi
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-gi.require_version('GtkLayerShell', '0.1')
 gi.require_version('GdkPixbuf', '2.0')
-from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, GtkLayerShell
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
 PID_FILE = "/tmp/ytmusic_player.pid"
 MPV_SOCKET = "/tmp/ytmusic_mpv.sock"
@@ -30,19 +28,16 @@ CSS = b"""
 }
 
 window.yt-window {
-    background-color: transparent;
+    background-color: #10101a;
 }
 
 .yt-panel {
-    background-color: rgba(16, 16, 26, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    border-radius: 24px;
+    background-color: #10101a;
     padding: 20px;
-    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.60);
 }
 
 .header-title {
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 800;
     color: #ff0055;
     letter-spacing: 0.5px;
@@ -68,8 +63,8 @@ window.yt-window {
     color: #ffffff;
     border: none;
     border-radius: 12px;
-    padding: 6px 14px;
-    font-size: 14px;
+    padding: 6px 16px;
+    font-size: 13px;
     font-weight: 700;
 }
 
@@ -80,18 +75,18 @@ window.yt-window {
 .cover-art {
     border-radius: 18px;
     border: 1px solid rgba(255, 255, 255, 0.20);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .song-title {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 800;
     color: #ffffff;
-    margin-top: 6px;
+    margin-top: 8px;
 }
 
 .song-artist {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #7aa2f7;
     margin-bottom: 4px;
@@ -115,8 +110,8 @@ window.yt-window {
     color: #ffffff;
     border: none;
     border-radius: 9999px;
-    padding: 10px 22px;
-    font-size: 20px;
+    padding: 10px 24px;
+    font-size: 22px;
 }
 
 .btn-play:hover {
@@ -142,24 +137,25 @@ window.yt-window {
     background-color: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 14px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     margin-bottom: 6px;
 }
 
 .result-card:hover {
     background-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
-.btn-close {
+.btn-header {
     background-color: rgba(255, 255, 255, 0.08);
     color: #cccccc;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 9999px;
-    padding: 2px 8px;
-    font-size: 14px;
+    padding: 4px 10px;
+    font-size: 13px;
 }
 
-.btn-close:hover {
+.btn-header:hover {
     background-color: rgba(255, 255, 255, 0.22);
     color: #ffffff;
 }
@@ -248,15 +244,9 @@ class MPVController:
 class YTMusicPlayerWindow(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self.set_title("YouTube Music Player")
-
-        GtkLayerShell.init_for_window(self)
-        GtkLayerShell.set_namespace(self, "ytmusic-player")
-        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
-        if hasattr(GtkLayerShell, "set_keyboard_mode"):
-            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
-        else:
-            GtkLayerShell.set_keyboard_interactivity(self, True)
+        self.set_title("YouTube Music")
+        self.set_wmclass("ytmusic-player", "ytmusic-player")
+        self.set_default_size(520, 680)
 
         self.get_style_context().add_class("yt-window")
         self.connect("destroy", Gtk.main_quit)
@@ -275,13 +265,11 @@ class YTMusicPlayerWindow(Gtk.Window):
         self.current_title = "No Track Playing"
         self.current_artist = "Search for a song below"
         self.current_url = None
-        self.playlist_items = []
-        self.is_seeking = False
+        self.is_playing = False
 
         # Main Panel
-        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         self.panel.get_style_context().add_class("yt-panel")
-        self.panel.set_size_request(420, 580)
 
         # Header
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -289,11 +277,20 @@ class YTMusicPlayerWindow(Gtk.Window):
         lbl_title.get_style_context().add_class("header-title")
         lbl_title.set_halign(Gtk.Align.START)
 
+        self.lbl_status = Gtk.Label(label="")
+        self.lbl_status.get_style_context().add_class("song-artist")
+
+        btn_fullscreen = Gtk.Button(label="⛶")
+        btn_fullscreen.get_style_context().add_class("btn-header")
+        btn_fullscreen.connect("clicked", lambda w: self.fullscreen() if not self.is_maximized() else self.unfullscreen())
+
         btn_close = Gtk.Button(label="✕")
-        btn_close.get_style_context().add_class("btn-close")
+        btn_close.get_style_context().add_class("btn-header")
         btn_close.connect("clicked", lambda w: Gtk.main_quit())
 
-        header.pack_start(lbl_title, True, True, 0)
+        header.pack_start(lbl_title, False, False, 0)
+        header.pack_start(self.lbl_status, True, True, 0)
+        header.pack_start(btn_fullscreen, False, False, 0)
         header.pack_start(btn_close, False, False, 0)
 
         # Search Bar
@@ -317,13 +314,14 @@ class YTMusicPlayerWindow(Gtk.Window):
         # Cover Art Image
         self.img_cover = Gtk.Image()
         self.img_cover.get_style_context().add_class("cover-art")
-        self.img_cover.set_size_request(180, 180)
+        self.img_cover.set_size_request(200, 200)
         self.set_default_cover()
 
         self.lbl_song = Gtk.Label(label=self.current_title)
         self.lbl_song.get_style_context().add_class("song-title")
         self.lbl_song.set_line_wrap(True)
-        self.lbl_song.set_max_width_chars(32)
+        self.lbl_song.set_max_width_chars(35)
+        self.lbl_song.set_justify(Gtk.Justification.CENTER)
 
         self.lbl_artist = Gtk.Label(label=self.current_artist)
         self.lbl_artist.get_style_context().add_class("song-artist")
@@ -346,7 +344,7 @@ class YTMusicPlayerWindow(Gtk.Window):
         progress_box.pack_start(self.lbl_dur, False, False, 0)
 
         # Controls Row
-        ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
         ctrl_box.set_halign(Gtk.Align.CENTER)
 
         self.btn_play = Gtk.Button(label="󰐊")
@@ -385,7 +383,7 @@ class YTMusicPlayerWindow(Gtk.Window):
         GLib.timeout_add(1000, self.update_playback_status)
 
     def set_default_cover(self):
-        pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 180, 180)
+        pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 200, 200)
         pixbuf.fill(0x161624ff)
         self.img_cover.set_from_pixbuf(pixbuf)
 
@@ -398,7 +396,7 @@ class YTMusicPlayerWindow(Gtk.Window):
                 loader.write(data)
                 loader.close()
                 pixbuf = loader.get_pixbuf()
-                scaled = pixbuf.scale_simple(180, 180, GdkPixbuf.InterpType.BILINEAR)
+                scaled = pixbuf.scale_simple(200, 200, GdkPixbuf.InterpType.BILINEAR)
                 GLib.idle_add(self.img_cover.set_from_pixbuf, scaled)
             except Exception as e:
                 print("Failed to load cover art:", e)
@@ -425,7 +423,7 @@ class YTMusicPlayerWindow(Gtk.Window):
             url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query + ' audio')}"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
             html = urllib.request.urlopen(req, timeout=5).read().decode('utf-8')
-            vids = list(dict.fromkeys(re.findall(r'/watch\?v=([a-zA-Z0-9_-]{11})', html)))[:5]
+            vids = list(dict.fromkeys(re.findall(r'/watch\?v=([a-zA-Z0-9_-]{11})', html)))[:6]
 
             results = []
             for vid in vids:
@@ -464,7 +462,7 @@ class YTMusicPlayerWindow(Gtk.Window):
             self.results_box.pack_start(lbl, False, False, 0)
         else:
             for item in results:
-                card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
                 card.get_style_context().add_class("result-card")
 
                 info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -480,7 +478,7 @@ class YTMusicPlayerWindow(Gtk.Window):
                 info_box.pack_start(lbl_t, False, False, 0)
                 info_box.pack_start(lbl_a, False, False, 0)
 
-                btn_p = Gtk.Button(label="▶")
+                btn_p = Gtk.Button(label="▶ Play")
                 btn_p.get_style_context().add_class("btn-download")
                 btn_p.connect("clicked", lambda w, i=item: self.play_song(i))
 
@@ -498,14 +496,37 @@ class YTMusicPlayerWindow(Gtk.Window):
 
         self.lbl_song.set_text(self.current_title)
         self.lbl_artist.set_text(self.current_artist)
+        self.lbl_status.set_text("⏳ Loading stream...")
         self.load_cover_art_async(item['thumb'])
 
-        self.mpv.play(self.current_url)
+        threading.Thread(target=self._extract_and_play_async, args=(self.current_url,), daemon=True).start()
+
+    def _extract_and_play_async(self, page_url):
+        try:
+            # Use yt-dlp to extract direct audio stream URL
+            res = subprocess.run(
+                ["yt-dlp", "-g", "-f", "bestaudio/best", page_url],
+                capture_output=True, text=True, timeout=8
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                stream_url = res.stdout.strip().splitlines()[0]
+                self.mpv.play(stream_url)
+                GLib.idle_add(self._on_play_started)
+            else:
+                # Fallback to direct URL in mpv
+                self.mpv.play(page_url)
+                GLib.idle_add(self._on_play_started)
+        except Exception as e:
+            GLib.idle_add(self.lbl_status.set_text, "❌ Stream error")
+
+    def _on_play_started(self):
+        self.lbl_status.set_text("▶ Playing")
         self.btn_play.set_label("󰏤")
 
     def on_toggle_play(self, widget):
         paused = self.mpv.toggle_pause()
         self.btn_play.set_label("󰐊" if paused else "󰏤")
+        self.lbl_status.set_text("⏸ Paused" if paused else "▶ Playing")
 
     def on_download_current(self, widget):
         if not self.current_video_id or not self.current_url:
@@ -518,7 +539,6 @@ class YTMusicPlayerWindow(Gtk.Window):
                 os.makedirs(music_dir, exist_ok=True)
 
                 out_path = os.path.join(music_dir, "%(title)s.%(ext)s")
-                # Try yt-dlp first
                 res = subprocess.run([
                     "yt-dlp", "-x", "--audio-format", "mp3",
                     "-o", out_path, self.current_url
@@ -527,7 +547,7 @@ class YTMusicPlayerWindow(Gtk.Window):
                 if res.returncode == 0:
                     subprocess.run(["notify-send", "✅ Download Complete", f"Saved '{self.current_title}' to ~/Music!"])
                 else:
-                    subprocess.run(["notify-send", "❌ Download Failed", "yt-dlp encountered an error or is missing."])
+                    subprocess.run(["notify-send", "❌ Download Failed", "yt-dlp error during download."])
             except Exception as e:
                 subprocess.run(["notify-send", "❌ Download Failed", str(e)])
 
