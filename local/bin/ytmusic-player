@@ -1,0 +1,588 @@
+#!/usr/bin/env python3
+import os
+import sys
+import time
+import json
+import socket
+import threading
+import subprocess
+import urllib.parse
+import urllib.request
+import re
+import math
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, GtkLayerShell
+
+PID_FILE = "/tmp/ytmusic_player.pid"
+MPV_SOCKET = "/tmp/ytmusic_mpv.sock"
+
+CSS = b"""
+* {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    outline: none;
+    outline-width: 0px;
+    box-shadow: none;
+}
+
+window.yt-window {
+    background-color: transparent;
+}
+
+.yt-panel {
+    background-color: rgba(16, 16, 26, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    border-radius: 24px;
+    padding: 20px;
+    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.60);
+}
+
+.header-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #ff0055;
+    letter-spacing: 0.5px;
+}
+
+.search-entry {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    color: #ffffff;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.search-entry:focus {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: #ff0055;
+}
+
+.btn-search {
+    background-color: #ff0055;
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    padding: 6px 14px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.btn-search:hover {
+    background-color: #ff2a75;
+}
+
+.cover-art {
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40);
+}
+
+.song-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 6px;
+}
+
+.song-artist {
+    font-size: 12px;
+    font-weight: 600;
+    color: #7aa2f7;
+    margin-bottom: 4px;
+}
+
+.btn-ctrl {
+    background-color: rgba(255, 255, 255, 0.10);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 9999px;
+    padding: 8px 16px;
+    font-size: 16px;
+}
+
+.btn-ctrl:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-play {
+    background-color: #ff0055;
+    color: #ffffff;
+    border: none;
+    border-radius: 9999px;
+    padding: 10px 22px;
+    font-size: 20px;
+}
+
+.btn-play:hover {
+    background-color: #ff2a75;
+}
+
+.btn-download {
+    background-color: rgba(0, 204, 136, 0.20);
+    color: #00cc88;
+    border: 1px solid rgba(0, 204, 136, 0.45);
+    border-radius: 12px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.btn-download:hover {
+    background-color: rgba(0, 204, 136, 0.40);
+    color: #ffffff;
+}
+
+.result-card {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+}
+
+.result-card:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.btn-close {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #cccccc;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-size: 14px;
+}
+
+.btn-close:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+}
+
+scale contents trough {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+    min-height: 4px;
+}
+
+scale contents highlight {
+    background-color: #ff0055;
+    border-radius: 9999px;
+}
+
+scale slider {
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 12px;
+    min-height: 12px;
+}
+
+scrolledwindow {
+    background-color: transparent;
+}
+"""
+
+class MPVController:
+    def __init__(self):
+        self.proc = None
+        self.ensure_mpv_running()
+
+    def ensure_mpv_running(self):
+        if not os.path.exists(MPV_SOCKET):
+            try:
+                self.proc = subprocess.Popen([
+                    "mpv", "--no-video", "--idle",
+                    f"--input-ipc-server={MPV_SOCKET}"
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(0.3)
+            except Exception as e:
+                print("Failed to start mpv:", e)
+
+    def send_cmd(self, command):
+        self.ensure_mpv_running()
+        if not os.path.exists(MPV_SOCKET):
+            return None
+        try:
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            client.connect(MPV_SOCKET)
+            payload = json.dumps({"command": command}) + "\n"
+            client.sendall(payload.encode('utf-8'))
+            response = client.recv(4096).decode('utf-8')
+            client.close()
+            if response:
+                res_data = json.loads(response.splitlines()[0])
+                return res_data.get("data")
+        except Exception:
+            return None
+
+    def play(self, url):
+        self.send_cmd(["loadfile", url, "replace"])
+
+    def toggle_pause(self):
+        paused = self.send_cmd(["get_property", "pause"])
+        if paused is not None:
+            self.send_cmd(["set_property", "pause", not paused])
+            return not paused
+        return False
+
+    def is_paused(self):
+        return self.send_cmd(["get_property", "pause"])
+
+    def get_time_pos(self):
+        pos = self.send_cmd(["get_property", "time-pos"])
+        return float(pos) if pos is not None else 0.0
+
+    def get_duration(self):
+        dur = self.send_cmd(["get_property", "duration"])
+        return float(dur) if dur is not None else 0.0
+
+    def seek(self, seconds):
+        self.send_cmd(["seek", seconds, "absolute"])
+
+
+class YTMusicPlayerWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("YouTube Music Player")
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "ytmusic-player")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        if hasattr(GtkLayerShell, "set_keyboard_mode"):
+            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        else:
+            GtkLayerShell.set_keyboard_interactivity(self, True)
+
+        self.get_style_context().add_class("yt-window")
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event", self.on_key_press)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        self.mpv = MPVController()
+        self.current_video_id = None
+        self.current_title = "No Track Playing"
+        self.current_artist = "Search for a song below"
+        self.current_url = None
+        self.playlist_items = []
+        self.is_seeking = False
+
+        # Main Panel
+        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.panel.get_style_context().add_class("yt-panel")
+        self.panel.set_size_request(420, 580)
+
+        # Header
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_title = Gtk.Label(label="󰓇  YouTube Music")
+        lbl_title.get_style_context().add_class("header-title")
+        lbl_title.set_halign(Gtk.Align.START)
+
+        btn_close = Gtk.Button(label="✕")
+        btn_close.get_style_context().add_class("btn-close")
+        btn_close.connect("clicked", lambda w: Gtk.main_quit())
+
+        header.pack_start(lbl_title, True, True, 0)
+        header.pack_start(btn_close, False, False, 0)
+
+        # Search Bar
+        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.entry_search = Gtk.Entry()
+        self.entry_search.set_placeholder_text("🔍 Search song or artist...")
+        self.entry_search.get_style_context().add_class("search-entry")
+        self.entry_search.connect("activate", self.on_search)
+
+        btn_search = Gtk.Button(label="Search")
+        btn_search.get_style_context().add_class("btn-search")
+        btn_search.connect("clicked", self.on_search)
+
+        search_box.pack_start(self.entry_search, True, True, 0)
+        search_box.pack_start(btn_search, False, False, 0)
+
+        # Now Playing Player Card
+        player_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        player_card.set_halign(Gtk.Align.CENTER)
+
+        # Cover Art Image
+        self.img_cover = Gtk.Image()
+        self.img_cover.get_style_context().add_class("cover-art")
+        self.img_cover.set_size_request(180, 180)
+        self.set_default_cover()
+
+        self.lbl_song = Gtk.Label(label=self.current_title)
+        self.lbl_song.get_style_context().add_class("song-title")
+        self.lbl_song.set_line_wrap(True)
+        self.lbl_song.set_max_width_chars(32)
+
+        self.lbl_artist = Gtk.Label(label=self.current_artist)
+        self.lbl_artist.get_style_context().add_class("song-artist")
+
+        # Progress bar slider
+        progress_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.lbl_time = Gtk.Label(label="00:00")
+        self.lbl_time.get_style_context().add_class("song-artist")
+
+        self.scale_progress = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.scale_progress.set_draw_value(False)
+        self.scale_progress.set_hexpand(True)
+        self.scale_progress.connect("change-value", self.on_slider_change)
+
+        self.lbl_dur = Gtk.Label(label="00:00")
+        self.lbl_dur.get_style_context().add_class("song-artist")
+
+        progress_box.pack_start(self.lbl_time, False, False, 0)
+        progress_box.pack_start(self.scale_progress, True, True, 0)
+        progress_box.pack_start(self.lbl_dur, False, False, 0)
+
+        # Controls Row
+        ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ctrl_box.set_halign(Gtk.Align.CENTER)
+
+        self.btn_play = Gtk.Button(label="󰐊")
+        self.btn_play.get_style_context().add_class("btn-play")
+        self.btn_play.connect("clicked", self.on_toggle_play)
+
+        btn_download = Gtk.Button(label="📥 Download MP3")
+        btn_download.get_style_context().add_class("btn-download")
+        btn_download.connect("clicked", self.on_download_current)
+
+        ctrl_box.pack_start(self.btn_play, False, False, 0)
+        ctrl_box.pack_start(btn_download, False, False, 0)
+
+        player_card.pack_start(self.img_cover, False, False, 0)
+        player_card.pack_start(self.lbl_song, False, False, 0)
+        player_card.pack_start(self.lbl_artist, False, False, 0)
+        player_card.pack_start(progress_box, False, False, 0)
+        player_card.pack_start(ctrl_box, False, False, 0)
+
+        # Search Results List
+        self.scrolled = Gtk.ScrolledWindow()
+        self.scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.scrolled.set_vexpand(True)
+
+        self.results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.scrolled.add(self.results_box)
+
+        self.panel.pack_start(header, False, False, 0)
+        self.panel.pack_start(search_box, False, False, 0)
+        self.panel.pack_start(player_card, False, False, 0)
+        self.panel.pack_start(self.scrolled, True, True, 0)
+
+        self.add(self.panel)
+        self.show_all()
+
+        GLib.timeout_add(1000, self.update_playback_status)
+
+    def set_default_cover(self):
+        pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 180, 180)
+        pixbuf.fill(0x161624ff)
+        self.img_cover.set_from_pixbuf(pixbuf)
+
+    def load_cover_art_async(self, thumb_url):
+        def _fetch():
+            try:
+                req = urllib.request.Request(thumb_url, headers={'User-Agent': 'Mozilla/5.0'})
+                data = urllib.request.urlopen(req, timeout=5).read()
+                loader = GdkPixbuf.PixbufLoader()
+                loader.write(data)
+                loader.close()
+                pixbuf = loader.get_pixbuf()
+                scaled = pixbuf.scale_simple(180, 180, GdkPixbuf.InterpType.BILINEAR)
+                GLib.idle_add(self.img_cover.set_from_pixbuf, scaled)
+            except Exception as e:
+                print("Failed to load cover art:", e)
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def on_search(self, widget):
+        query = self.entry_search.get_text().strip()
+        if not query:
+            return
+
+        for child in self.results_box.get_children():
+            self.results_box.remove(child)
+
+        lbl_loading = Gtk.Label(label="Searching YouTube Music...")
+        lbl_loading.get_style_context().add_class("song-artist")
+        self.results_box.pack_start(lbl_loading, False, False, 0)
+        self.results_box.show_all()
+
+        threading.Thread(target=self._perform_search_async, args=(query,), daemon=True).start()
+
+    def _perform_search_async(self, query):
+        try:
+            url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query + ' audio')}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            html = urllib.request.urlopen(req, timeout=5).read().decode('utf-8')
+            vids = list(dict.fromkeys(re.findall(r'/watch\?v=([a-zA-Z0-9_-]{11})', html)))[:5]
+
+            results = []
+            for vid in vids:
+                try:
+                    oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid}&format=json"
+                    oreq = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    data = json.loads(urllib.request.urlopen(oreq, timeout=3).read().decode('utf-8'))
+                    results.append({
+                        'id': vid,
+                        'title': data.get('title', 'Unknown Title'),
+                        'artist': data.get('author_name', 'Unknown Artist'),
+                        'thumb': data.get('thumbnail_url', f'https://img.youtube.com/vi/{vid}/hqdefault.jpg')
+                    })
+                except Exception:
+                    pass
+
+            GLib.idle_add(self._render_search_results, results)
+        except Exception as e:
+            GLib.idle_add(self._render_search_error, str(e))
+
+    def _render_search_error(self, err_msg):
+        for child in self.results_box.get_children():
+            self.results_box.remove(child)
+        lbl = Gtk.Label(label=f"Search failed: {err_msg}")
+        lbl.get_style_context().add_class("song-artist")
+        self.results_box.pack_start(lbl, False, False, 0)
+        self.results_box.show_all()
+
+    def _render_search_results(self, results):
+        for child in self.results_box.get_children():
+            self.results_box.remove(child)
+
+        if not results:
+            lbl = Gtk.Label(label="No songs found")
+            lbl.get_style_context().add_class("song-artist")
+            self.results_box.pack_start(lbl, False, False, 0)
+        else:
+            for item in results:
+                card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                card.get_style_context().add_class("result-card")
+
+                info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                lbl_t = Gtk.Label(label=item['title'])
+                lbl_t.get_style_context().add_class("song-title")
+                lbl_t.set_halign(Gtk.Align.START)
+                lbl_t.set_line_wrap(True)
+
+                lbl_a = Gtk.Label(label=item['artist'])
+                lbl_a.get_style_context().add_class("song-artist")
+                lbl_a.set_halign(Gtk.Align.START)
+
+                info_box.pack_start(lbl_t, False, False, 0)
+                info_box.pack_start(lbl_a, False, False, 0)
+
+                btn_p = Gtk.Button(label="▶")
+                btn_p.get_style_context().add_class("btn-download")
+                btn_p.connect("clicked", lambda w, i=item: self.play_song(i))
+
+                card.pack_start(info_box, True, True, 0)
+                card.pack_start(btn_p, False, False, 0)
+                self.results_box.pack_start(card, False, False, 0)
+
+        self.results_box.show_all()
+
+    def play_song(self, item):
+        self.current_video_id = item['id']
+        self.current_title = item['title']
+        self.current_artist = item['artist']
+        self.current_url = f"https://www.youtube.com/watch?v={item['id']}"
+
+        self.lbl_song.set_text(self.current_title)
+        self.lbl_artist.set_text(self.current_artist)
+        self.load_cover_art_async(item['thumb'])
+
+        self.mpv.play(self.current_url)
+        self.btn_play.set_label("󰏤")
+
+    def on_toggle_play(self, widget):
+        paused = self.mpv.toggle_pause()
+        self.btn_play.set_label("󰐊" if paused else "󰏤")
+
+    def on_download_current(self, widget):
+        if not self.current_video_id or not self.current_url:
+            return
+
+        def _download():
+            try:
+                subprocess.run(["notify-send", "📥 YT Music Downloader", f"Downloading '{self.current_title}'..."])
+                music_dir = os.path.expanduser("~/Music")
+                os.makedirs(music_dir, exist_ok=True)
+
+                out_path = os.path.join(music_dir, "%(title)s.%(ext)s")
+                # Try yt-dlp first
+                res = subprocess.run([
+                    "yt-dlp", "-x", "--audio-format", "mp3",
+                    "-o", out_path, self.current_url
+                ], capture_output=True)
+
+                if res.returncode == 0:
+                    subprocess.run(["notify-send", "✅ Download Complete", f"Saved '{self.current_title}' to ~/Music!"])
+                else:
+                    subprocess.run(["notify-send", "❌ Download Failed", "yt-dlp encountered an error or is missing."])
+            except Exception as e:
+                subprocess.run(["notify-send", "❌ Download Failed", str(e)])
+
+        threading.Thread(target=_download, daemon=True).start()
+
+    def on_slider_change(self, scale, scroll_type, value):
+        self.mpv.seek(value)
+
+    def update_playback_status(self):
+        pos = self.mpv.get_time_pos()
+        dur = self.mpv.get_duration()
+
+        if dur > 0:
+            self.scale_progress.set_range(0, dur)
+            self.scale_progress.set_value(pos)
+
+            pos_min, pos_sec = int(pos // 60), int(pos % 60)
+            dur_min, dur_sec = int(dur // 60), int(dur % 60)
+
+            self.lbl_time.set_text(f"{pos_min:02d}:{pos_sec:02d}")
+            self.lbl_dur.set_text(f"{dur_min:02d}:{dur_sec:02d}")
+
+        return True
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            Gtk.main_quit()
+            return True
+        return False
+
+
+def main():
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 15)
+            os.remove(PID_FILE)
+            return
+        except Exception:
+            pass
+
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+    try:
+        app = YTMusicPlayerWindow()
+        Gtk.main()
+    finally:
+        if os.path.exists(PID_FILE):
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    main()

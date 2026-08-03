@@ -289,6 +289,7 @@ hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("/home/zaki/.local/bin/wallpaper-pick
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("/home/zaki/.local/bin/lockscreen"))
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
 hl.bind(mainMod .. " + K", hl.dsp.exec_cmd("/home/zaki/.local/bin/shortcut"))
+hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("/home/zaki/.local/bin/ytmusic-player"))
 hl.bind(mainMod .. " + ALT + R", hl.dsp.exec_cmd("/home/zaki/.local/bin/optimize-ram"))
 
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
@@ -394,6 +395,13 @@ hl.layer_rule({
 hl.layer_rule({
     name  = "calendar-blur",
     match = { namespace = "^calendar-popup$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
+
+hl.layer_rule({
+    name  = "ytmusic-blur",
+    match = { namespace = "^ytmusic-player$" },
     blur  = true,
     ignore_alpha = 0.1,
 })
