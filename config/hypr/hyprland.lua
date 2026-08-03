@@ -423,6 +423,13 @@ hl.window_rule({
 })
 
 hl.window_rule({
+    name  = "ytmusic-opacity",
+    match = { class = "ytmusic-player" },
+
+    opacity = "0.85 0.85",
+})
+
+hl.window_rule({
     name  = "wifi-menu-floating",
     match = { class = "floating_wifi" },
 
