@@ -1,0 +1,468 @@
+#!/usr/bin/env python3
+import os
+import sys
+import time
+import math
+import calendar
+import datetime
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+
+PID_FILE = "/tmp/calendar_popup.pid"
+
+MONTH_NAMES_ID = [
+    "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+]
+
+HOLIDAYS = {
+    # 2026 Hari Libur Nasional Indonesia
+    (2026, 1, 1): "Tahun Baru 2026 Masehi 🎆",
+    (2026, 1, 16): "Isra Mikraj Nabi Muhammad SAW 🕌",
+    (2026, 2, 17): "Tahun Baru Imlek 2577 Kongzili 🧧",
+    (2026, 3, 19): "Hari Raya Nyepi (Tahun Baru Saka 1948) 🛕",
+    (2026, 3, 20): "Hari Raya Idul Fitri 1447 H 🌙",
+    (2026, 3, 21): "Hari Raya Idul Fitri 1447 H 🌙",
+    (2026, 4, 3): "Wafat Yesus Kristus ✝️",
+    (2026, 4, 5): "Hari Paskah 🥚",
+    (2026, 5, 1): "Hari Buruh Internasional 🛠️",
+    (2026, 5, 14): "Kenaikan Yesus Kristus ✝️",
+    (2026, 5, 27): "Hari Raya Idul Adha 1447 H 🕋",
+    (2026, 5, 31): "Hari Raya Waisak 2570 BE 🪷",
+    (2026, 6, 1): "Hari Lahir Pancasila 🇮🇩",
+    (2026, 6, 16): "Tahun Baru Islam 1448 H 🕌",
+    (2026, 8, 17): "Hari Kemerdekaan Republik Indonesia 🇮🇩",
+    (2026, 8, 25): "Maulid Nabi Muhammad SAW 🕌",
+    (2026, 12, 25): "Hari Raya Natal 🎄",
+
+    # 2025 Hari Libur Nasional
+    (2025, 1, 1): "Tahun Baru 2025 Masehi 🎆",
+    (2025, 1, 27): "Isra Mikraj Nabi Muhammad SAW 🕌",
+    (2025, 1, 29): "Tahun Baru Imlek 2576 Kongzili 🧧",
+    (2025, 3, 29): "Hari Raya Nyepi 1947 🛕",
+    (2025, 3, 31): "Hari Raya Idul Fitri 1446 H 🌙",
+    (2025, 4, 1): "Hari Raya Idul Fitri 1446 H 🌙",
+    (2025, 4, 18): "Wafat Yesus Kristus ✝️",
+    (2025, 4, 20): "Hari Paskah 🥚",
+    (2025, 5, 1): "Hari Buruh Internasional 🛠️",
+    (2025, 5, 12): "Hari Raya Waisak 2569 BE 🪷",
+    (2025, 5, 29): "Kenaikan Yesus Kristus ✝️",
+    (2025, 6, 1): "Hari Lahir Pancasila 🇮🇩",
+    (2025, 6, 6): "Hari Raya Idul Adha 1446 H 🕋",
+    (2025, 6, 27): "Tahun Baru Islam 1447 H 🕌",
+    (2025, 8, 17): "Hari Kemerdekaan RI 🇮🇩",
+    (2025, 9, 5): "Maulid Nabi Muhammad SAW 🕌",
+    (2025, 12, 25): "Hari Raya Natal 🎄",
+
+    # 2027 Hari Libur Nasional
+    (2027, 1, 1): "Tahun Baru 2027 Masehi 🎆",
+    (2027, 2, 6): "Isra Mikraj Nabi Muhammad SAW 🕌",
+    (2027, 2, 7): "Tahun Baru Imlek 2578 Kongzili 🧧",
+    (2027, 3, 9): "Hari Raya Idul Fitri 1448 H 🌙",
+    (2027, 3, 10): "Hari Raya Idul Fitri 1448 H 🌙",
+    (2027, 3, 22): "Hari Raya Nyepi 1949 🛕",
+    (2027, 3, 26): "Wafat Yesus Kristus ✝️",
+    (2027, 5, 1): "Hari Buruh Internasional 🛠️",
+    (2027, 5, 6): "Kenaikan Yesus Kristus ✝️",
+    (2027, 5, 16): "Hari Raya Idul Adha 1448 H 🕋",
+    (2027, 5, 20): "Hari Raya Waisak 2571 BE 🪷",
+    (2027, 6, 1): "Hari Lahir Pancasila 🇮🇩",
+    (2027, 6, 6): "Tahun Baru Islam 1449 H 🕌",
+    (2027, 8, 15): "Maulid Nabi Muhammad SAW 🕌",
+    (2027, 8, 17): "Hari Kemerdekaan RI 🇮🇩",
+    (2027, 12, 25): "Hari Raya Natal 🎄",
+}
+
+CSS = b"""
+* {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    outline: none;
+    outline-width: 0px;
+    box-shadow: none;
+}
+
+window.cal-window {
+    background-color: transparent;
+}
+
+.cal-panel {
+    background-color: rgba(16, 16, 26, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.50);
+}
+
+.month-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.btn-nav {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+    padding: 3px 10px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.btn-nav:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+}
+
+.btn-today {
+    background-color: rgba(122, 162, 247, 0.20);
+    color: #7aa2f7;
+    border: 1px solid rgba(122, 162, 247, 0.40);
+    border-radius: 10px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.btn-today:hover {
+    background-color: rgba(122, 162, 247, 0.40);
+    color: #ffffff;
+}
+
+.weekday-hdr {
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.60);
+    padding: 6px 0px;
+}
+
+.weekday-hdr-red {
+    font-size: 12px;
+    font-weight: 700;
+    color: #ff5555;
+    padding: 6px 0px;
+}
+
+.day-cell {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e0e0e0;
+    min-width: 38px;
+    min-height: 38px;
+    border-radius: 12px;
+    margin: 1px;
+}
+
+.day-other-month {
+    color: rgba(255, 255, 255, 0.20);
+}
+
+.day-sunday {
+    color: #ff6b6b;
+}
+
+.day-holiday {
+    background-color: rgba(255, 85, 85, 0.22);
+    color: #ff5555;
+    border: 1px solid rgba(255, 85, 85, 0.50);
+    font-weight: 700;
+}
+
+.day-today {
+    background-color: #7aa2f7;
+    color: #0f0f18;
+    font-weight: 800;
+    box-shadow: 0 4px 14px rgba(122, 162, 247, 0.50);
+}
+
+.holiday-box {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin-top: 14px;
+}
+
+.holiday-item {
+    font-size: 12px;
+    font-weight: 600;
+    color: #ff8888;
+    margin-top: 2px;
+}
+
+.holiday-hdr {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.50);
+    margin-bottom: 4px;
+}
+"""
+
+def ease_out_cubic(t):
+    t = max(0.0, min(1.0, t))
+    return 1.0 - math.pow(1.0 - t, 3)
+
+def ease_in_cubic(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * t
+
+
+class AestheticCalendarWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("Indonesian Aesthetic Calendar")
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "calendar-popup")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        if hasattr(GtkLayerShell, "set_keyboard_mode"):
+            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        else:
+            GtkLayerShell.set_keyboard_interactivity(self, True)
+
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 38)
+
+        self.get_style_context().add_class("cal-window")
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event", self.on_key_press)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        now = datetime.datetime.now()
+        self.curr_year = now.year
+        self.curr_month = now.month
+        self.today_year = now.year
+        self.today_month = now.month
+        self.today_day = now.day
+
+        # Main Panel Box
+        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.panel.get_style_context().add_class("cal-panel")
+        self.panel.set_size_request(340, -1)
+
+        # Header: Month Nav
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.lbl_month = Gtk.Label()
+        self.lbl_month.get_style_context().add_class("month-title")
+        self.lbl_month.set_halign(Gtk.Align.START)
+
+        btn_prev = Gtk.Button(label="◀")
+        btn_prev.get_style_context().add_class("btn-nav")
+        btn_prev.connect("clicked", self.on_prev_month)
+
+        btn_today = Gtk.Button(label="Hari Ini")
+        btn_today.get_style_context().add_class("btn-today")
+        btn_today.connect("clicked", self.on_goto_today)
+
+        btn_next = Gtk.Button(label="▶")
+        btn_next.get_style_context().add_class("btn-nav")
+        btn_next.connect("clicked", self.on_next_month)
+
+        btn_close = Gtk.Button(label="✕")
+        btn_close.get_style_context().add_class("btn-nav")
+        btn_close.connect("clicked", lambda w: self.close_window())
+
+        header.pack_start(self.lbl_month, True, True, 0)
+        header.pack_start(btn_prev, False, False, 0)
+        header.pack_start(btn_today, False, False, 0)
+        header.pack_start(btn_next, False, False, 0)
+        header.pack_start(btn_close, False, False, 0)
+
+        # Grid for Calendar Days
+        self.grid = Gtk.Grid()
+        self.grid.set_column_homogeneous(True)
+        self.grid.set_row_homogeneous(True)
+        self.grid.set_column_spacing(2)
+        self.grid.set_row_spacing(2)
+
+        # Holidays List Container
+        self.holiday_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.holiday_box.get_style_context().add_class("holiday-box")
+
+        self.panel.pack_start(header, False, False, 0)
+        self.panel.pack_start(self.grid, False, False, 0)
+        self.panel.pack_start(self.holiday_box, False, False, 0)
+
+        self.add(self.panel)
+
+        self.render_calendar()
+
+        # Animation state
+        self.start_time = time.time()
+        self.is_closing = False
+        self.close_time = 0
+        self.set_opacity(0.0)
+
+        self.show_all()
+        GLib.timeout_add(16, self.on_animation_frame)
+
+    def render_calendar(self):
+        # Update month header text
+        month_name = MONTH_NAMES_ID[self.curr_month]
+        self.lbl_month.set_text(f"{month_name} {self.curr_year}")
+
+        # Clear grid children
+        for child in self.grid.get_children():
+            self.grid.remove(child)
+
+        # Weekday Headers: Min (Sunday) to Sab (Saturday)
+        weekdays = [("Min", True), ("Sen", False), ("Sel", False), ("Rab", False), ("Kam", False), ("Jum", False), ("Sab", False)]
+        for col, (w_name, is_red) in enumerate(weekdays):
+            lbl = Gtk.Label(label=w_name)
+            lbl.get_style_context().add_class("weekday-hdr-red" if is_red else "weekday-hdr")
+            self.grid.attach(lbl, col, 0, 1, 1)
+
+        # Get month calendar info (Sunday is start of week: 6)
+        cal = calendar.Calendar(firstweekday=6)
+        month_days = cal.monthdayscalendar(self.curr_year, self.curr_month)
+
+        row = 1
+        for week in month_days:
+            for col, day in enumerate(week):
+                if day == 0:
+                    lbl = Gtk.Label(label="")
+                    lbl.get_style_context().add_class("day-cell")
+                    lbl.get_style_context().add_class("day-other-month")
+                    self.grid.attach(lbl, col, row, 1, 1)
+                else:
+                    lbl = Gtk.Label(label=str(day))
+                    lbl.get_style_context().add_class("day-cell")
+
+                    is_sunday = (col == 0)
+                    is_holiday = (self.curr_year, self.curr_month, day) in HOLIDAYS
+                    is_today = (self.curr_year == self.today_year and self.curr_month == self.today_month and day == self.today_day)
+
+                    if is_today:
+                        lbl.get_style_context().add_class("day-today")
+                    elif is_holiday:
+                        lbl.get_style_context().add_class("day-holiday")
+                        h_name = HOLIDAYS[(self.curr_year, self.curr_month, day)]
+                        lbl.set_tooltip_text(f"🔴 {h_name}")
+                    elif is_sunday:
+                        lbl.get_style_context().add_class("day-sunday")
+
+                    self.grid.attach(lbl, col, row, 1, 1)
+            row += 1
+
+        self.grid.show_all()
+
+        # Update Holiday List for current month
+        for child in self.holiday_box.get_children():
+            self.holiday_box.remove(child)
+
+        month_holidays = []
+        for (y, m, d), name in sorted(HOLIDAYS.items()):
+            if y == self.curr_year and m == self.curr_month:
+                month_holidays.append((d, name))
+
+        if month_holidays:
+            hdr = Gtk.Label(label="📌 Tanggal Merah Bulan Ini:")
+            hdr.get_style_context().add_class("holiday-hdr")
+            hdr.set_halign(Gtk.Align.START)
+            self.holiday_box.pack_start(hdr, False, False, 0)
+
+            for d, name in month_holidays:
+                h_item = Gtk.Label(label=f"• {d} {month_name}: {name}")
+                h_item.get_style_context().add_class("holiday-item")
+                h_item.set_halign(Gtk.Align.START)
+                self.holiday_box.pack_start(h_item, False, False, 0)
+            self.holiday_box.show_all()
+        else:
+            self.holiday_box.hide()
+
+    def on_prev_month(self, widget):
+        if self.curr_month == 1:
+            self.curr_month = 12
+            self.curr_year -= 1
+        else:
+            self.curr_month -= 1
+        self.render_calendar()
+
+    def on_next_month(self, widget):
+        if self.curr_month == 12:
+            self.curr_month = 1
+            self.curr_year += 1
+        else:
+            self.curr_month += 1
+        self.render_calendar()
+
+    def on_goto_today(self, widget):
+        self.curr_year = self.today_year
+        self.curr_month = self.today_month
+        self.render_calendar()
+
+    def close_window(self):
+        if not self.is_closing:
+            self.is_closing = True
+            self.close_time = time.time()
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close_window()
+            return True
+        return False
+
+    def on_animation_frame(self):
+        now = time.time()
+        if not self.is_closing:
+            elapsed = now - self.start_time
+            if elapsed < 0.25:
+                progress = ease_out_cubic(elapsed / 0.25)
+                self.set_opacity(progress)
+                margin = int(20 + (18 * progress))
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, margin)
+                return True
+            else:
+                self.set_opacity(1.0)
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 38)
+                return True
+        else:
+            c_elapsed = now - self.close_time
+            if c_elapsed < 0.20:
+                progress = 1.0 - ease_in_cubic(c_elapsed / 0.20)
+                self.set_opacity(progress)
+                return True
+            else:
+                self.set_opacity(0.0)
+                Gtk.main_quit()
+                return False
+
+
+def main():
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 15)
+            os.remove(PID_FILE)
+            return
+        except Exception:
+            pass
+
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+    try:
+        app = AestheticCalendarWindow()
+        Gtk.main()
+    finally:
+        if os.path.exists(PID_FILE):
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    main()

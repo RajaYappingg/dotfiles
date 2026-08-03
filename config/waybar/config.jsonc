@@ -43,7 +43,7 @@
         "timezone": "Asia/Jakarta",
         "format": "󰥔  {:%H:%M  •  %a, %d %b}",
         "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
-        "on-click": "notify-send '📅 Calendar' \"$(cal)\""
+        "on-click": "/home/zaki/.local/bin/calendar-popup"
     },
 
     "custom/cpu": {
