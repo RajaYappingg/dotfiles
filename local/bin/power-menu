@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, GtkLayerShell
+
+PID_FILE = "/tmp/power_menu.pid"
+
+CSS = b"""
+* {
+    font-family: "Inter", "JetBrains Mono", "SF Pro Display", sans-serif;
+    outline: none;
+    outline-width: 0px;
+    box-shadow: none;
+}
+
+window.power-window {
+    background-color: rgba(10, 18, 20, 0.65);
+}
+
+.power-card {
+    background-color: rgba(18, 30, 32, 0.70);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 20px;
+    min-width: 220px;
+    min-height: 150px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.power-card:hover, .power-card:focus {
+    background-color: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.40);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.40);
+}
+
+.power-card.active-card {
+    background-color: rgba(255, 255, 255, 0.22);
+    border: 2px solid rgba(255, 255, 255, 0.60);
+}
+
+.power-icon {
+    font-size: 54px;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.power-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: #e0e6ed;
+    letter-spacing: 0.5px;
+}
+
+.close-hint {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.50);
+    margin-top: 24px;
+}
+"""
+
+class PowerMenuWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("Power Menu")
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "power-menu")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+
+        screen = Gdk.Screen.get_default()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+
+        self.get_style_context().add_class("power-window")
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("button-press-event", self.on_bg_click)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            screen,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        main_box.set_valign(Gtk.Align.CENTER)
+        main_box.set_halign(Gtk.Align.CENTER)
+
+        # 2x3 Grid
+        grid = Gtk.Grid()
+        grid.set_row_spacing(18)
+        grid.set_column_spacing(18)
+
+        options = [
+            ("🔒", "Lock", self.action_lock, 0, 0, True),
+            ("⏻", "Shutdown", self.action_shutdown, 1, 0, False),
+            ("⏸", "Suspend", self.action_suspend, 2, 0, False),
+            ("🔄", "Reboot", self.action_reboot, 0, 1, False),
+            ("🚪", "Logout", self.action_logout, 1, 1, False),
+            ("💤", "Hibernate", self.action_hibernate, 2, 1, False),
+        ]
+
+        for icon_str, label_str, callback, col, row, is_active in options:
+            card_btn = Gtk.Button()
+            card_btn.get_style_context().add_class("power-card")
+            if is_active:
+                card_btn.get_style_context().add_class("active-card")
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            box.set_valign(Gtk.Align.CENTER)
+            box.set_halign(Gtk.Align.CENTER)
+
+            lbl_icon = Gtk.Label(label=icon_str)
+            lbl_icon.get_style_context().add_class("power-icon")
+
+            lbl_txt = Gtk.Label(label=label_str)
+            lbl_txt.get_style_context().add_class("power-label")
+
+            box.pack_start(lbl_icon, False, False, 0)
+            box.pack_start(lbl_txt, False, False, 0)
+
+            card_btn.add(box)
+            card_btn.connect("clicked", self.create_action_cb(callback))
+            grid.attach(card_btn, col, row, 1, 1)
+
+        lbl_hint = Gtk.Label(label="Press ESC or Click Outside to Cancel")
+        lbl_hint.get_style_context().add_class("close-hint")
+        lbl_hint.set_halign(Gtk.Align.CENTER)
+
+        main_box.pack_start(grid, False, False, 0)
+        main_box.pack_start(lbl_hint, False, False, 0)
+
+        self.add(main_box)
+        self.show_all()
+
+    def create_action_cb(self, callback):
+        def _cb(widget):
+            self.close_window()
+            callback()
+        return _cb
+
+    def on_bg_click(self, widget, event):
+        # Close on background click
+        alloc = widget.get_allocation()
+        if event.window == widget.get_window():
+            self.close_window()
+
+    def on_key_press(self, widget, event):
+        if event.keyval in (Gdk.KEY_Escape, Gdk.KEY_q):
+            self.close_window()
+            return True
+        return False
+
+    def close_window(self):
+        if os.path.exists(PID_FILE):
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
+        Gtk.main_quit()
+
+    def action_lock(self):
+        subprocess.Popen(["/home/zaki/.local/bin/lockscreen"])
+
+    def action_shutdown(self):
+        subprocess.Popen(["systemctl", "poweroff"])
+
+    def action_suspend(self):
+        subprocess.Popen(["systemctl", "suspend"])
+
+    def action_reboot(self):
+        subprocess.Popen(["systemctl", "reboot"])
+
+    def action_logout(self):
+        subprocess.Popen(["hyprctl", "dispatch", "exit"])
+
+    def action_hibernate(self):
+        subprocess.Popen(["systemctl", "hibernate"])
+
+
+def main():
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 15)
+            os.remove(PID_FILE)
+            return
+        except Exception:
+            pass
+
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+    try:
+        app = PowerMenuWindow()
+        Gtk.main()
+    finally:
+        if os.path.exists(PID_FILE):
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    main()

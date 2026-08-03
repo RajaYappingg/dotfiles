@@ -325,6 +325,7 @@ hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_S
 hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),   { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessUp",  hl.dsp.exec_cmd("/home/zaki/.local/bin/change-brightness +5"), { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown",hl.dsp.exec_cmd("/home/zaki/.local/bin/change-brightness -5"), { locked = true, repeating = true })
+hl.bind("XF86PowerOff",       hl.dsp.exec_cmd("/home/zaki/.local/bin/power-menu"),         { locked = true })
 
 -- Requires playerctl
 hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
@@ -393,6 +394,13 @@ hl.layer_rule({
 hl.layer_rule({
     name  = "calendar-blur",
     match = { namespace = "^calendar-popup$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
+
+hl.layer_rule({
+    name  = "power-menu-blur",
+    match = { namespace = "^power-menu$" },
     blur  = true,
     ignore_alpha = 0.1,
 })
