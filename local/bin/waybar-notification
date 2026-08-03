@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+
+def get_dunst_info():
+    try:
+        paused = subprocess.run(["dunstctl", "is-paused"], capture_output=True, text=True).stdout.strip() == "true"
+        count_out = subprocess.run(["dunstctl", "count"], capture_output=True, text=True).stdout.strip()
+        
+        history_count = 0
+        displayed_count = 0
+        waiting_count = 0
+
+        for line in count_out.splitlines():
+            line = line.strip()
+            if line.startswith("History:"):
+                history_count = int(line.split(":")[1].strip())
+            elif line.startswith("Currently displayed:"):
+                displayed_count = int(line.split(":")[1].strip())
+            elif line.startswith("Waiting:"):
+                waiting_count = int(line.split(":")[1].strip())
+
+        total = history_count + displayed_count + waiting_count
+
+        if paused:
+            icon = "󰂛"
+            text = f"{icon} DND"
+            tooltip = f"Notifications: Paused (DND)\nHistory: {history_count}\n\nLeft-click: Show History\nRight-click: Clear All\nMiddle-click: Resume Notifications"
+            css_class = "dnd"
+        elif total > 0:
+            icon = "󰂞"
+            text = f"{icon} {total}"
+            tooltip = f"Notifications: {total} in history\n\nLeft-click: Pop History\nRight-click: Clear All\nMiddle-click: Enable DND"
+            css_class = "has-notifications"
+        else:
+            icon = "󰂚"
+            text = f"{icon}"
+            tooltip = "No Notifications\n\nLeft-click: Check History\nRight-click: Clear All\nMiddle-click: Enable DND"
+            css_class = "none"
+
+        return json.dumps({
+            "text": text,
+            "tooltip": tooltip,
+            "class": css_class
+        })
+    except Exception as e:
+        return json.dumps({
+            "text": "󰂚",
+            "tooltip": f"Error: {e}",
+            "class": "error"
+        })
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1]
+        if cmd == "pop":
+            subprocess.Popen(["/home/zaki/.local/bin/notification-center"])
+        elif cmd == "clear":
+            subprocess.run(["dunstctl", "close-all"])
+            subprocess.run(["dunstctl", "history-clear"])
+        elif cmd == "dnd":
+            subprocess.run(["dunstctl", "set-paused", "toggle"])
+    else:
+        print(get_dunst_info())

@@ -47,7 +47,7 @@ local menu = "/home/zaki/.local/bin/dashboard-launcher"
 -- See https://wiki.hypr.land/Configuring/Basics/Autostart/
 
 hl.on("hyprland.start", function ()
-    -- hl.exec_cmd("waybar")
+    hl.exec_cmd("waybar")
     hl.exec_cmd("awww-daemon || swww-daemon")
     hl.exec_cmd("/home/zaki/.local/bin/brightness-daemon")
     hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
@@ -380,6 +380,13 @@ hl.window_rule({
 hl.layer_rule({
     name  = "lockscreen-blur",
     match = { namespace = "^lockscreen$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
+
+hl.layer_rule({
+    name  = "notif-center-blur",
+    match = { namespace = "^notification-center$" },
     blur  = true,
     ignore_alpha = 0.1,
 })

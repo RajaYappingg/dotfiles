@@ -6,6 +6,7 @@ import threading
 import math
 import getpass
 import time
+import random
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -17,7 +18,7 @@ import cairo
 
 CSS = b"""
 * {
-    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-family: "Inter", "JetBrains Mono", "Noto Color Emoji", sans-serif;
     outline: none;
     outline-width: 0px;
     box-shadow: none;
@@ -38,24 +39,25 @@ window.lock-window {
 
 .pass-entry-box {
     background-color: rgba(235, 235, 242, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.50);
+    border: 1px solid rgba(255, 255, 255, 0.40);
     border-radius: 9999px;
-    padding: 4px 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.40);
+    padding: 4px 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     transition: all 0.2s ease-in-out;
 }
 
 .pass-entry-box:focus-within {
     background-color: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(120, 160, 255, 0.80);
-    box-shadow: 0 12px 35px rgba(80, 130, 255, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.80);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.40);
 }
 
 .pass-entry {
     background-color: transparent;
     border: none;
-    color: #1a1a24;
-    padding: 8px 16px;
+    color: transparent;
+    caret-color: transparent;
+    padding: 8px 12px;
     font-size: 15px;
     font-weight: 600;
 }
@@ -65,6 +67,22 @@ window.lock-window {
     color: #222230;
     font-size: 15px;
     margin-left: 12px;
+}
+
+.submit-btn {
+    background-color: transparent;
+    border: none;
+    color: #222230;
+    font-size: 16px;
+    margin-right: 4px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    transition: all 0.2s ease-in-out;
+}
+
+.submit-btn:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+    color: #000000;
 }
 
 .status-label {
@@ -89,6 +107,165 @@ def ease_out_back(t):
 def ease_in_cubic(t):
     t = max(0.0, min(1.0, t))
     return t * t * t
+
+
+class FXOverlayCanvas(Gtk.DrawingArea):
+    def __init__(self):
+        super().__init__()
+        self.particles = []
+        self.red_flash_start = 0
+        self.set_can_focus(False)
+        self.connect("draw", self.on_draw)
+
+    def trigger_confetti(self, origin_x, origin_y):
+        self.particles = []
+        colors = [
+            (1.0, 0.84, 0.0),    # Gold
+            (1.0, 0.28, 0.34),   # Coral Red/Pink
+            (0.0, 0.82, 0.83),   # Cyan
+            (0.61, 0.35, 0.95),  # Purple
+            (0.06, 0.75, 0.52),  # Emerald Green
+            (1.0, 0.42, 0.42),   # Pink
+            (0.23, 0.51, 0.96),  # Blue
+            (1.0, 0.62, 0.26),   # Orange
+        ]
+        now = time.time()
+        for _ in range(130):
+            angle = random.uniform(-math.pi * 0.85, -math.pi * 0.15)
+            speed = random.uniform(7.0, 24.0)
+            self.particles.append({
+                'x': origin_x + random.uniform(-60, 60),
+                'y': origin_y + random.uniform(-10, 10),
+                'vx': math.cos(angle) * speed,
+                'vy': math.sin(angle) * speed,
+                'gravity': random.uniform(0.35, 0.60),
+                'drag': random.uniform(0.96, 0.985),
+                'color': random.choice(colors),
+                'size_w': random.uniform(7, 14),
+                'size_h': random.uniform(5, 10),
+                'rotation': random.uniform(0, 2 * math.pi),
+                'v_rot': random.uniform(-0.25, 0.25),
+                'alpha': 1.0,
+                'spawn_time': now,
+            })
+        self.queue_draw()
+
+    def trigger_red_flash(self):
+        self.red_flash_start = time.time()
+        self.queue_draw()
+
+    def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        now = time.time()
+
+        cr.set_antialias(cairo.ANTIALIAS_BEST)
+
+        # 1. Red Screen Flash Tint (if password wrong)
+        if self.red_flash_start > 0:
+            elapsed = now - self.red_flash_start
+            if elapsed < 0.55:
+                alpha = (1.0 - ease_out_cubic(elapsed / 0.55)) * 0.38
+                cr.set_source_rgba(0.95, 0.12, 0.12, alpha)
+                cr.rectangle(0, 0, w, h)
+                cr.fill()
+            else:
+                self.red_flash_start = 0
+
+        # 2. Confetti Particles (if password correct)
+        if self.particles:
+            active_particles = []
+            for p in self.particles:
+                p['x'] += p['vx']
+                p['y'] += p['vy']
+                p['vy'] += p['gravity']
+                p['vx'] *= p['drag']
+                p['vy'] *= p['drag']
+                p['rotation'] += p['v_rot']
+                p['alpha'] -= 0.012
+
+                if p['alpha'] > 0 and p['y'] < h + 60:
+                    active_particles.append(p)
+
+                    cr.save()
+                    cr.translate(p['x'], p['y'])
+                    cr.rotate(p['rotation'])
+
+                    r, g, b = p['color']
+                    cr.set_source_rgba(r, g, b, max(0.0, p['alpha']))
+                    cr.rectangle(-p['size_w'] / 2, -p['size_h'] / 2, p['size_w'], p['size_h'])
+                    cr.fill()
+                    cr.restore()
+
+            self.particles = active_particles
+
+
+class PasswordDotsWidget(Gtk.DrawingArea):
+    def __init__(self):
+        super().__init__()
+        self.dots_timestamps = []
+        self.placeholder = "Enter Password..."
+        self.set_size_request(220, 36)
+        self.connect("draw", self.on_draw)
+
+    def set_dot_count(self, count):
+        now = time.time()
+        curr_len = len(self.dots_timestamps)
+        if count > curr_len:
+            for _ in range(count - curr_len):
+                self.dots_timestamps.append(now)
+        elif count < curr_len:
+            self.dots_timestamps = self.dots_timestamps[:count]
+        self.queue_draw()
+
+    def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        now = time.time()
+
+        cr.set_antialias(cairo.ANTIALIAS_BEST)
+        cy = h / 2.0
+
+        if not self.dots_timestamps:
+            # Render aesthetic placeholder text
+            cr.select_font_face("Inter", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(14)
+            extents = cr.text_extents(self.placeholder)
+            x = (w - extents.width) / 2.0
+            y = cy + (extents.height / 2.0) - (extents.y_bearing / 2.0 + extents.height / 2.0)
+            cr.set_source_rgba(0.2, 0.2, 0.28, 0.55)
+            cr.move_to(x, y)
+            cr.show_text(self.placeholder)
+
+            # Subtle blinking text cursor line
+            if int(now * 2.2) % 2 == 0:
+                cursor_x = x - 4
+                cr.set_source_rgba(0.3, 0.3, 0.4, 0.75)
+                cr.set_line_width(2)
+                cr.move_to(cursor_x, cy - 7)
+                cr.line_to(cursor_x, cy + 7)
+                cr.stroke()
+            return
+
+        # Render clean solid dots scaling up from small to big (0 -> 1.0 scale)
+        dot_radius = 5.5
+        dot_spacing = 16.0
+        n_dots = len(self.dots_timestamps)
+        total_width = (n_dots - 1) * dot_spacing
+        start_x = (w - total_width) / 2.0
+
+        for i, spawn_time in enumerate(self.dots_timestamps):
+            t = (now - spawn_time) / 0.18  # 180ms scale-up animation
+            scale = ease_out_back(min(1.0, t)) if t < 1.0 else 1.0
+            
+            cx = start_x + (i * dot_spacing)
+            r = dot_radius * scale
+
+            if r > 0.1:
+                # Clean solid aesthetic dot circle
+                cr.set_source_rgba(0.12, 0.12, 0.18, 0.92)
+                cr.arc(cx, cy, r, 0, 2 * math.pi)
+                cr.fill()
 
 
 class GradientClock(Gtk.DrawingArea):
@@ -210,6 +387,9 @@ class MinimalAestheticLockScreen(Gtk.Window):
         self.get_style_context().add_class("lock-window")
         self.connect("destroy", Gtk.main_quit)
         self.connect("key-press-event", self.on_key_press)
+        
+        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.connect("button-press-event", self.on_button_press)
 
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
@@ -239,22 +419,41 @@ class MinimalAestheticLockScreen(Gtk.Window):
         spacer.set_size_request(1, 140)
 
         # 3. Pill / Capsule Password Entry Box
+        self.pass_event_box = Gtk.EventBox()
+        self.pass_event_box.set_visible_window(False)
+        self.pass_event_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.pass_event_box.connect("button-press-event", self.on_button_press)
+
         self.pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.pass_box.get_style_context().add_class("pass-entry-box")
         self.pass_box.set_halign(Gtk.Align.CENTER)
 
-        lbl_lock_icon = Gtk.Label(label="󰌾")
-        lbl_lock_icon.get_style_context().add_class("lock-icon")
+        self.lbl_lock_icon = Gtk.Label(label="󰌾")
+        self.lbl_lock_icon.get_style_context().add_class("lock-icon")
+
+        self.dots_widget = PasswordDotsWidget()
 
         self.entry_pass = Gtk.Entry()
         self.entry_pass.set_visibility(False)
-        self.entry_pass.set_placeholder_text("Enter Password...")
         self.entry_pass.get_style_context().add_class("pass-entry")
         self.entry_pass.set_width_chars(20)
         self.entry_pass.connect("activate", self.on_authenticate)
+        self.entry_pass.connect("changed", self.on_typing_changed)
 
-        self.pass_box.pack_start(lbl_lock_icon, False, False, 0)
-        self.pass_box.pack_start(self.entry_pass, False, False, 0)
+        pass_overlay = Gtk.Overlay()
+        pass_overlay.add(self.dots_widget)
+        pass_overlay.add_overlay(self.entry_pass)
+
+        self.btn_submit = Gtk.Button(label="➔")
+        self.btn_submit.get_style_context().add_class("submit-btn")
+        self.btn_submit.set_relief(Gtk.ReliefStyle.NONE)
+        self.btn_submit.connect("clicked", self.on_authenticate)
+
+        self.pass_box.pack_start(self.lbl_lock_icon, False, False, 0)
+        self.pass_box.pack_start(pass_overlay, True, True, 0)
+        self.pass_box.pack_start(self.btn_submit, False, False, 0)
+
+        self.pass_event_box.add(self.pass_box)
 
         # Status Label (for incorrect password feedback)
         self.lbl_status = Gtk.Label(label="")
@@ -264,22 +463,30 @@ class MinimalAestheticLockScreen(Gtk.Window):
         main_box.pack_start(self.clock_widget, False, False, 0)
         main_box.pack_start(self.lbl_date, False, False, 0)
         main_box.pack_start(spacer, False, False, 0)
-        main_box.pack_start(self.pass_box, False, False, 0)
+        main_box.pack_start(self.pass_event_box, False, False, 0)
         main_box.pack_start(self.lbl_status, False, False, 0)
 
-        self.add(main_box)
+        self.main_box = main_box
+        self.fx_overlay = FXOverlayCanvas()
+
+        self.root_overlay = Gtk.Overlay()
+        self.root_overlay.add(self.main_box)
+        self.root_overlay.add_overlay(self.fx_overlay)
+
+        self.add(self.root_overlay)
 
         # Animation states
         self.start_time = time.time()
         self.is_closing = False
         self.close_time = 0
-        self.shake_start = 0
+        self.red_shake_start = 0
         self.is_authenticating = False
+        self.failed_attempts = 0
 
         # Initial hidden states for staggered animation
         self.set_opacity(0.0)
         self.lbl_date.set_opacity(0.0)
-        self.pass_box.set_opacity(0.0)
+        self.pass_event_box.set_opacity(0.0)
         self.lbl_status.set_opacity(0.0)
 
         # Activate lockscreen submap to block all Hyprland global shortcuts (e.g. Super+R, Super+Q, Super+E, etc.)
@@ -302,8 +509,9 @@ class MinimalAestheticLockScreen(Gtk.Window):
         self.lbl_date.set_text(d_str)
         return True
 
-    def trigger_shake(self):
-        self.shake_start = time.time()
+    def on_typing_changed(self, entry):
+        text = entry.get_text()
+        self.dots_widget.set_dot_count(len(text))
 
     def on_animation_frame(self):
         now = time.time()
@@ -327,35 +535,40 @@ class MinimalAestheticLockScreen(Gtk.Window):
                 margin_offset = int((1.0 - date_t) * 15)
                 self.lbl_date.set_margin_top(4 + margin_offset)
 
+            # Drive animations
+            self.dots_widget.queue_draw()
+            self.fx_overlay.queue_draw()
+
             # 4. Pass Box Entrance (0.15s -> 0.55s)
             pass_elapsed = elapsed - 0.15
             if pass_elapsed > 0:
                 pass_t = ease_out_back(pass_elapsed / 0.40)
-                self.pass_box.set_opacity(min(1.0, pass_t))
+                self.pass_event_box.set_opacity(min(1.0, pass_t))
                 margin_offset = int((1.0 - pass_t) * 25)
-                self.pass_box.set_margin_top(10 + margin_offset)
+                self.pass_event_box.set_margin_top(10 + margin_offset)
 
-            # 5. Shake Animation (if triggered on wrong password)
-            if self.shake_start > 0:
-                s_elapsed = now - self.shake_start
-                if s_elapsed < 0.45:
-                    offset = math.sin(s_elapsed * 35.0) * 16.0 * math.exp(-s_elapsed * 7.0)
-                    self.pass_box.set_margin_start(int(offset))
-                    self.pass_box.set_margin_end(int(-offset))
+            # 5. Red Screen Shake (if triggered on wrong password)
+            if self.red_shake_start > 0:
+                s_elapsed = now - self.red_shake_start
+                if s_elapsed < 0.50:
+                    offset = math.sin(s_elapsed * 42.0) * 24.0 * math.exp(-s_elapsed * 5.5)
+                    self.main_box.set_margin_start(int(offset))
+                    self.main_box.set_margin_end(int(-offset))
                 else:
-                    self.shake_start = 0
-                    self.pass_box.set_margin_start(0)
-                    self.pass_box.set_margin_end(0)
+                    self.red_shake_start = 0
+                    self.main_box.set_margin_start(0)
+                    self.main_box.set_margin_end(0)
 
             # Re-draw clock for any active digit transitions
             self.clock_widget.queue_draw()
             return True
 
         else:
-            # Closing Animation (Fade out + scale out)
+            # Closing Animation with Confetti Burst (0.65s duration)
             c_elapsed = now - self.close_time
-            if c_elapsed < 0.25:
-                progress = 1.0 - ease_in_cubic(c_elapsed / 0.25)
+            self.fx_overlay.queue_draw()
+            if c_elapsed < 0.65:
+                progress = 1.0 - ease_in_cubic(c_elapsed / 0.65)
                 self.set_opacity(progress)
                 self.clock_widget.set_entrance(progress)
                 return True
@@ -364,9 +577,14 @@ class MinimalAestheticLockScreen(Gtk.Window):
                 Gtk.main_quit()
                 return False
 
+    def on_button_press(self, widget, event):
+        self.entry_pass.grab_focus()
+        return False
+
     def on_key_press(self, widget, event):
         if event.keyval == Gdk.KEY_Escape:
             self.entry_pass.set_text("")
+            self.dots_widget.set_dot_count(0)
             return True
         return False
 
@@ -386,14 +604,34 @@ class MinimalAestheticLockScreen(Gtk.Window):
 
     def _verify_password_async(self, password):
         success = False
+        # 1. Try PAM check via unix_chkpwd (direct & reliable)
         try:
+            user = getpass.getuser()
             res = subprocess.run(
-                ["sudo", "-S", "-v"],
-                input=f"{password}\n", text=True, capture_output=True, timeout=5
+                ["/usr/bin/unix_chkpwd", user, "nullok"],
+                input=f"{password}\x00".encode('utf-8'),
+                capture_output=True,
+                timeout=3
             )
-            success = (res.returncode == 0)
+            if res.returncode == 0:
+                success = True
         except Exception:
-            success = False
+            pass
+
+        # 2. Fallback to sudo -k -S -p "" -v
+        if not success:
+            try:
+                subprocess.run(["sudo", "-k"], capture_output=True, timeout=2)
+                res = subprocess.run(
+                    ["sudo", "-S", "-p", "", "-v"],
+                    input=f"{password}\n",
+                    text=True,
+                    capture_output=True,
+                    timeout=5
+                )
+                success = (res.returncode == 0)
+            except Exception:
+                success = False
 
         GLib.idle_add(self._on_auth_result, success)
 
@@ -402,14 +640,25 @@ class MinimalAestheticLockScreen(Gtk.Window):
         self.entry_pass.set_sensitive(True)
 
         if success:
+            self.failed_attempts = 0
             self.lbl_status.set_markup("<span foreground='#00ff99'>✓ Unlocked</span>")
+            w = self.get_allocated_width()
+            h = self.get_allocated_height()
+            self.fx_overlay.trigger_confetti(w / 2.0, h / 2.0 + 40.0)
             self.is_closing = True
             self.close_time = time.time()
         else:
-            self.lbl_status.set_markup("<span foreground='#ff4444'>✕ Incorrect password</span>")
+            self.failed_attempts += 1
+            if self.failed_attempts >= 3:
+                self.lbl_status.set_markup("<span foreground='#ff4444'>wrong password lil bro 💀</span>")
+            else:
+                self.lbl_status.set_markup("<span foreground='#ff4444'>✕ Incorrect password</span>")
+
             self.entry_pass.set_text("")
+            self.dots_widget.set_dot_count(0)
             self.entry_pass.grab_focus()
-            self.trigger_shake()
+            self.fx_overlay.trigger_red_flash()
+            self.red_shake_start = time.time()
 
 def main():
     try:
@@ -423,3 +672,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -22,6 +22,7 @@
         "network",
         "pulseaudio",
         "battery",
+        "custom/notification",
         "tray"
     ],
 
@@ -115,6 +116,16 @@
         "tooltip-format": "Battery: {capacity}%\nClick: Power Profiles Menu\nRight-Click: Battery Details",
         "on-click": "/home/zaki/.local/bin/battery-menu",
         "on-click-right": "/home/zaki/.local/bin/battery-info"
+    },
+
+    "custom/notification": {
+        "exec": "/home/zaki/.local/bin/waybar-notification",
+        "return-type": "json",
+        "interval": 2,
+        "format": "{}",
+        "on-click": "/home/zaki/.local/bin/waybar-notification pop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-notification clear",
+        "on-click-middle": "/home/zaki/.local/bin/waybar-notification dnd"
     },
 
     "tray": {

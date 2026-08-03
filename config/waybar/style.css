@@ -28,6 +28,7 @@ window#waybar {
 #network,
 #pulseaudio,
 #battery,
+#custom-notification,
 #tray {
     background-color: @bg_pill;
     color: @text_main;
@@ -36,6 +37,16 @@ window#waybar {
     padding: 3px 12px;
     margin: 1px 3px;
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+#custom-notification.has-notifications {
+    color: #ff9e64;
+    border-color: #ff9e64;
+}
+
+#custom-notification.dnd {
+    color: #f7768e;
+    border-color: #f7768e;
 }
 
 #workspaces {

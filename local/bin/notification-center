@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import time
+import subprocess
+import math
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+
+PID_FILE = "/tmp/notification_center.pid"
+
+CSS = b"""
+* {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    outline: none;
+    outline-width: 0px;
+    box-shadow: none;
+}
+
+window.notif-window {
+    background-color: transparent;
+}
+
+.notif-panel {
+    background-color: rgba(16, 16, 26, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 20px;
+    padding: 18px;
+    margin: 10px 10px 10px 0px;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.45);
+}
+
+.header-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.btn-clear-all {
+    background-color: rgba(255, 255, 255, 0.10);
+    color: #f0f0f5;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-clear-all:hover {
+    background-color: rgba(255, 85, 85, 0.30);
+    border-color: rgba(255, 85, 85, 0.60);
+    color: #ff8888;
+}
+
+.btn-close {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #cccccc;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-size: 14px;
+}
+
+.btn-close:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+}
+
+.notif-card {
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    transition: all 0.2s ease-in-out;
+}
+
+.notif-card:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.card-appname {
+    font-size: 11px;
+    font-weight: 700;
+    color: #7aa2f7;
+    letter-spacing: 0.5px;
+}
+
+.card-time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.card-summary {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 4px;
+    margin-bottom: 2px;
+}
+
+.card-body {
+    font-size: 12px;
+    color: rgba(235, 235, 245, 0.85);
+}
+
+.empty-icon {
+    font-size: 48px;
+    color: rgba(255, 255, 255, 0.25);
+    margin-bottom: 8px;
+}
+
+.empty-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+scrolledwindow {
+    background-color: transparent;
+}
+
+scrollbar slider {
+    min-width: 4px;
+    border-radius: 9999px;
+    background-color: rgba(255, 255, 255, 0.25);
+}
+"""
+
+def ease_out_cubic(t):
+    t = max(0.0, min(1.0, t))
+    return 1.0 - math.pow(1.0 - t, 3)
+
+def ease_in_cubic(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * t
+
+
+class NotificationCenterWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("Notification Center")
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "notification-center")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        if hasattr(GtkLayerShell, "set_keyboard_mode"):
+            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        else:
+            GtkLayerShell.set_keyboard_interactivity(self, True)
+
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+
+        self.get_style_context().add_class("notif-window")
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("key-press-event", self.on_key_press)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        # Panel Box
+        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.panel.get_style_context().add_class("notif-panel")
+        self.panel.set_size_request(370, -1)
+
+        # Header Box
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_title = Gtk.Label(label="󰂚  Notifications")
+        lbl_title.get_style_context().add_class("header-title")
+        lbl_title.set_halign(Gtk.Align.START)
+
+        self.btn_clear = Gtk.Button(label="󰎟 Clear All")
+        self.btn_clear.get_style_context().add_class("btn-clear-all")
+        self.btn_clear.connect("clicked", self.on_clear_all)
+
+        btn_close = Gtk.Button(label="✕")
+        btn_close.get_style_context().add_class("btn-close")
+        btn_close.connect("clicked", lambda w: self.close_drawer())
+
+        header.pack_start(lbl_title, True, True, 0)
+        header.pack_start(self.btn_clear, False, False, 0)
+        header.pack_start(btn_close, False, False, 0)
+
+        # Scrollable Cards Container
+        self.scrolled = Gtk.ScrolledWindow()
+        self.scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.scrolled.set_vexpand(True)
+
+        self.cards_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.scrolled.add(self.cards_box)
+
+        self.panel.pack_start(header, False, False, 0)
+        self.panel.pack_start(self.scrolled, True, True, 0)
+
+        self.add(self.panel)
+
+        # Animation states
+        self.start_time = time.time()
+        self.is_closing = False
+        self.close_time = 0
+        self.target_margin = 10
+        self.start_margin = -400
+
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, self.start_margin)
+
+        self.load_notifications()
+        self.show_all()
+
+        GLib.timeout_add(16, self.on_animation_frame)
+
+    def load_notifications(self):
+        # Clear existing card widgets
+        for child in self.cards_box.get_children():
+            self.cards_box.remove(child)
+
+        notifications = []
+        try:
+            res = subprocess.run(["dunstctl", "history"], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0 and res.stdout.strip():
+                data = json.loads(res.stdout)
+                if "data" in data and len(data["data"]) > 0 and len(data["data"][0]) > 0:
+                    notifications = data["data"][0]
+        except Exception:
+            pass
+
+        if not notifications:
+            # Empty state
+            empty_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            empty_box.set_valign(Gtk.Align.CENTER)
+            empty_box.set_halign(Gtk.Align.CENTER)
+            empty_box.set_vexpand(True)
+            empty_box.set_margin_top(120)
+
+            lbl_icon = Gtk.Label(label="󰂜")
+            lbl_icon.get_style_context().add_class("empty-icon")
+            lbl_txt = Gtk.Label(label="No notifications")
+            lbl_txt.get_style_context().add_class("empty-label")
+
+            empty_box.pack_start(lbl_icon, False, False, 0)
+            empty_box.pack_start(lbl_txt, False, False, 0)
+            self.cards_box.pack_start(empty_box, True, True, 0)
+            self.btn_clear.set_sensitive(False)
+        else:
+            self.btn_clear.set_sensitive(True)
+            for item in notifications:
+                card = self.create_card_widget(item)
+                self.cards_box.pack_start(card, False, False, 0)
+
+        self.cards_box.show_all()
+
+    def create_card_widget(self, item):
+        appname = item.get("appname", {}).get("data", "System")
+        summary = item.get("summary", {}).get("data", "")
+        body = item.get("body", {}).get("data", "")
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.get_style_context().add_class("notif-card")
+
+        # Top row: Appname badge
+        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_app = Gtk.Label(label=f"󰂚  {appname}")
+        lbl_app.get_style_context().add_class("card-appname")
+        lbl_app.set_halign(Gtk.Align.START)
+
+        top_row.pack_start(lbl_app, True, True, 0)
+
+        # Summary
+        lbl_sum = Gtk.Label(label=summary)
+        lbl_sum.get_style_context().add_class("card-summary")
+        lbl_sum.set_halign(Gtk.Align.START)
+        lbl_sum.set_line_wrap(True)
+
+        # Body
+        lbl_body = Gtk.Label(label=body)
+        lbl_body.get_style_context().add_class("card-body")
+        lbl_body.set_halign(Gtk.Align.START)
+        lbl_body.set_line_wrap(True)
+
+        card.pack_start(top_row, False, False, 0)
+        card.pack_start(lbl_sum, False, False, 0)
+        if body:
+            card.pack_start(lbl_body, False, False, 0)
+
+        return card
+
+    def on_clear_all(self, widget):
+        try:
+            subprocess.run(["dunstctl", "close-all"])
+            subprocess.run(["dunstctl", "history-clear"])
+        except Exception:
+            pass
+        self.load_notifications()
+
+    def close_drawer(self):
+        if not self.is_closing:
+            self.is_closing = True
+            self.close_time = time.time()
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close_drawer()
+            return True
+        return False
+
+    def on_animation_frame(self):
+        now = time.time()
+        if not self.is_closing:
+            elapsed = now - self.start_time
+            if elapsed < 0.35:
+                progress = ease_out_cubic(elapsed / 0.35)
+                current_margin = int(self.start_margin + (self.target_margin - self.start_margin) * progress)
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, current_margin)
+                return True
+            else:
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, self.target_margin)
+                return True
+        else:
+            c_elapsed = now - self.close_time
+            if c_elapsed < 0.28:
+                progress = ease_in_cubic(c_elapsed / 0.28)
+                current_margin = int(self.target_margin + (self.start_margin - self.target_margin) * progress)
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, current_margin)
+                return True
+            else:
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, self.start_margin)
+                Gtk.main_quit()
+                return False
+
+
+def main():
+    # PID lock for toggle functionality
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 15)  # SIGTERM
+            os.remove(PID_FILE)
+            return
+        except Exception:
+            pass
+
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+    try:
+        app = NotificationCenterWindow()
+        Gtk.main()
+    finally:
+        if os.path.exists(PID_FILE):
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    main()
