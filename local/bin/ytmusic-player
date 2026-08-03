@@ -22,267 +22,296 @@ import cairo
 PID_FILE = "/tmp/ytmusic_player.pid"
 MPV_SOCKET = "/tmp/ytmusic_mpv.sock"
 
+# Award-Winning Luxury Dark Palette:
+# Background: #0B0D15 | Card: #141827 | Sec Card: #1B2133
+# Accent Pink: #FF3D81 | Accent Purple: #6C63FF | Accent Blue: #4DD0E1
+# White Text: #F4F5F7 | Sec Text: #A7AEC2 | Border: rgba(255,255,255,0.08)
+
 CSS = b"""
 * {
-    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-family: "Inter", "SF Pro Display", "Segoe UI", sans-serif;
     outline: none;
     outline-width: 0px;
     box-shadow: none;
 }
 
 window.yt-window {
-    background-color: rgba(12, 12, 20, 0.80);
+    background-color: rgba(11, 13, 21, 0.85);
+}
+
+.main-container {
+    background-color: rgba(11, 13, 21, 0.85);
 }
 
 .yt-sidebar {
-    background-color: rgba(16, 16, 26, 0.85);
-    border-right: 1px solid rgba(255, 255, 255, 0.10);
-    padding: 18px 14px;
+    background-color: rgba(20, 24, 39, 0.75);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 20px 16px;
 }
 
 .yt-logo {
-    font-size: 19px;
+    font-size: 20px;
     font-weight: 800;
-    color: #ff0055;
+    color: #FF3D81;
     letter-spacing: 0.5px;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
 }
 
 .nav-item {
     background-color: transparent;
-    color: rgba(255, 255, 255, 0.70);
+    color: #A7AEC2;
     border: none;
-    border-radius: 12px;
-    padding: 10px 14px;
+    border-radius: 14px;
+    padding: 10px 16px;
     font-size: 13.5px;
     font-weight: 600;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
 }
 
 .nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #F4F5F7;
 }
 
 .nav-item.active {
-    background-color: rgba(255, 0, 85, 0.20);
-    color: #ff0055;
+    background-color: rgba(255, 61, 129, 0.18);
+    color: #FF3D81;
     font-weight: 700;
 }
 
 .section-hdr {
     font-size: 11px;
     font-weight: 800;
-    color: rgba(255, 255, 255, 0.40);
-    letter-spacing: 1px;
-    margin-top: 18px;
-    margin-bottom: 6px;
+    color: rgba(167, 174, 194, 0.60);
+    letter-spacing: 1.2px;
+    margin-top: 20px;
+    margin-bottom: 8px;
 }
 
 .playlist-item {
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 12.5px;
+    color: #A7AEC2;
+    font-size: 13px;
     font-weight: 600;
-    padding: 6px 10px;
-    border-radius: 10px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    transition: all 0.15s ease;
 }
 
 .playlist-item:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.07);
+    color: #F4F5F7;
 }
 
 .playlist-item.active {
-    background-color: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
+    background-color: rgba(27, 33, 51, 0.80);
+    color: #F4F5F7;
+    border-left: 3px solid #FF3D81;
     font-weight: 700;
 }
 
 .user-profile {
-    background-color: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 14px;
-    padding: 10px 12px;
+    background-color: #141827;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 10px 14px;
+}
+
+.badge-premium {
+    background-color: rgba(255, 61, 129, 0.20);
+    color: #FF3D81;
+    border: 1px solid rgba(255, 61, 129, 0.40);
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 800;
 }
 
 .search-entry {
-    background-color: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    background-color: rgba(20, 24, 39, 0.80);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 9999px;
-    color: #ffffff;
-    padding: 9px 18px;
+    color: #F4F5F7;
+    padding: 10px 20px;
     font-size: 13.5px;
     font-weight: 500;
 }
 
 .search-entry:focus {
-    background-color: rgba(255, 255, 255, 0.12);
-    border-color: #ff0055;
+    background-color: #141827;
+    border-color: #FF3D81;
+    box-shadow: 0 0 15px rgba(255, 61, 129, 0.25);
 }
 
 .btn-search {
-    background-color: #ff0055;
-    color: #ffffff;
+    background-color: #FF3D81;
+    color: #F4F5F7;
     border: none;
     border-radius: 9999px;
-    padding: 8px 20px;
+    padding: 9px 22px;
     font-size: 13px;
     font-weight: 700;
 }
 
 .btn-search:hover {
-    background-color: #ff2a75;
+    background-color: #ff5591;
+    box-shadow: 0 4px 15px rgba(255, 61, 129, 0.40);
 }
 
 .hero-card {
-    background-color: rgba(22, 28, 45, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 22px;
+    background-color: #141827;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
     padding: 24px;
-    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.40);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.50);
 }
 
 .cover-art-lg {
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.50);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.60);
 }
 
 .badge-playing {
-    background-color: rgba(255, 0, 85, 0.20);
-    color: #ff0055;
-    border: 1px solid rgba(255, 0, 85, 0.40);
+    background-color: rgba(255, 61, 129, 0.20);
+    color: #FF3D81;
+    border: 1px solid rgba(255, 61, 129, 0.40);
     border-radius: 9999px;
-    padding: 3px 10px;
+    padding: 4px 12px;
     font-size: 11px;
     font-weight: 800;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
 }
 
 .song-title-lg {
     font-size: 26px;
     font-weight: 800;
-    color: #ffffff;
+    color: #F4F5F7;
     margin-top: 6px;
 }
 
 .song-artist-lg {
     font-size: 15px;
     font-weight: 700;
-    color: #ff0055;
+    color: #FF3D81;
 }
 
 .song-album-lg {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.55);
+    color: #A7AEC2;
 }
 
 .btn-round-pink {
-    background-color: #ff0055;
-    color: #ffffff;
+    background-color: #FF3D81;
+    color: #F4F5F7;
     border: none;
     border-radius: 50%;
-    min-width: 58px;
-    min-height: 58px;
+    min-width: 60px;
+    min-height: 60px;
     font-size: 24px;
-    box-shadow: 0 6px 20px rgba(255, 0, 85, 0.50);
+    box-shadow: 0 8px 25px rgba(255, 61, 129, 0.55);
+    transition: all 0.2s ease;
 }
 
 .btn-round-pink:hover {
-    background-color: #ff2a75;
+    background-color: #ff5591;
 }
 
 .btn-icon-soft {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #F4F5F7;
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 50%;
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 42px;
+    min-height: 42px;
     font-size: 16px;
+    transition: all 0.15s ease;
 }
 
 .btn-icon-soft:hover {
-    background-color: rgba(255, 255, 255, 0.20);
+    background-color: rgba(255, 255, 255, 0.18);
 }
 
 .right-panel {
-    background-color: rgba(16, 16, 26, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 20px;
-    padding: 16px;
+    background-color: #141827;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 22px;
+    padding: 18px;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.40);
 }
 
 .tab-btn-lg {
     background-color: transparent;
-    color: rgba(255, 255, 255, 0.50);
+    color: #A7AEC2;
     border: none;
     border-bottom: 2px solid transparent;
     padding: 8px 18px;
     font-size: 13px;
     font-weight: 800;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
 }
 
 .tab-btn-lg.active {
-    color: #ff0055;
-    border-bottom: 2px solid #ff0055;
+    color: #FF3D81;
+    border-bottom: 2px solid #FF3D81;
 }
 
 .queue-item {
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 12px;
-    padding: 8px 12px;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    padding: 10px 14px;
     margin-bottom: 6px;
+    transition: all 0.15s ease;
 }
 
 .queue-item:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.10);
 }
 
 .queue-item-active {
-    background-color: rgba(255, 0, 85, 0.18);
-    border: 1px solid rgba(255, 0, 85, 0.45);
-    border-radius: 12px;
-    padding: 8px 12px;
+    background-color: rgba(255, 61, 129, 0.15);
+    border: 1px solid rgba(255, 61, 129, 0.40);
+    border-radius: 14px;
+    padding: 10px 14px;
     margin-bottom: 6px;
 }
 
-.btn-clear-queue {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.80);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+.btn-action-outline {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #F4F5F7;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 12px;
-    padding: 8px 16px;
+    padding: 7px 16px;
     font-size: 12px;
     font-weight: 700;
+    transition: all 0.15s ease;
 }
 
-.btn-clear-queue:hover {
-    background-color: rgba(255, 85, 85, 0.25);
-    color: #ff8888;
+.btn-action-outline:hover {
+    background-color: rgba(255, 61, 129, 0.25);
+    color: #FF3D81;
+    border-color: rgba(255, 61, 129, 0.50);
 }
 
 .bottom-player-bar {
-    background-color: rgba(14, 14, 22, 0.90);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    padding: 10px 20px;
+    background-color: #0B0D15;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 12px 24px;
 }
 
 scale contents trough {
-    background-color: rgba(255, 255, 255, 0.15);
+    background-color: rgba(255, 255, 255, 0.12);
     border-radius: 9999px;
     min-height: 4px;
 }
 
 scale contents highlight {
-    background-color: #ff0055;
+    background-color: #FF3D81;
     border-radius: 9999px;
 }
 
 scale slider {
-    background-color: #ffffff;
+    background-color: #F4F5F7;
     border-radius: 50%;
     min-width: 12px;
     min-height: 12px;
@@ -296,11 +325,11 @@ scrolledwindow {
 class AnimatedWaveformVisualizer(Gtk.DrawingArea):
     def __init__(self):
         super().__init__()
-        self.set_size_request(-1, 36)
+        self.set_size_request(-1, 38)
         self.is_playing = False
-        self.bars = [random.uniform(0.2, 0.8) for _ in range(40)]
+        self.bars = [random.uniform(0.2, 0.8) for _ in range(42)]
         self.connect("draw", self.on_draw)
-        GLib.timeout_add(60, self.on_animate)
+        GLib.timeout_add(50, self.on_animate)
 
     def on_animate(self):
         if self.is_playing:
@@ -321,9 +350,11 @@ class AnimatedWaveformVisualizer(Gtk.DrawingArea):
             x = i * (bar_w + spacing)
             y = (h - bar_h) / 2.0
 
+            # Gradient: Hot Pink -> Purple -> Cyan Blue
             pat = cairo.LinearGradient(x, y, x, y + bar_h)
-            pat.add_color_stop_rgba(0.0, 1.0, 0.0, 0.33, 0.90)  # Hot Pink
-            pat.add_color_stop_rgba(1.0, 0.48, 0.63, 0.97, 0.85) # Cyan/Blue
+            pat.add_color_stop_rgba(0.0, 1.0, 0.24, 0.50, 0.95)  # #FF3D81 Pink
+            pat.add_color_stop_rgba(0.5, 0.42, 0.39, 1.0, 0.90)  # #6C63FF Purple
+            pat.add_color_stop_rgba(1.0, 0.30, 0.81, 0.88, 0.95)  # #4DD0E1 Blue
             cr.set_source(pat)
 
             cr.rectangle(x, y, bar_w, bar_h)
@@ -407,10 +438,10 @@ class MPVController:
 class YTMusicProWindow(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self.set_title("YouTube Music")
-        self.set_default_size(1180, 740)
+        self.set_title("YouTube Music Studio Pro")
+        self.set_default_size(1260, 780)
 
-        # Enable RGBA Transparency
+        # Enable RGBA Visual for Glassmorphism
         screen = Gdk.Screen.get_default()
         visual = screen.get_rgba_visual()
         if visual:
@@ -435,15 +466,16 @@ class YTMusicProWindow(Gtk.Window):
         self.is_user_seeking = False
         self.is_track_ending = False
 
-        # Root Layout: Sidebar + Main Content (plus Bottom Player Bar at bottom)
+        # Root Layout: VBox (Body HBox + Sticky Bottom Mini Player)
         root_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        root_vbox.get_style_context().add_class("main-container")
 
         body_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
 
-        # 1. LEFT SIDEBAR
+        # 1. LEFT SIDEBAR (~260px)
         sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         sidebar.get_style_context().add_class("yt-sidebar")
-        sidebar.set_size_request(230, -1)
+        sidebar.set_size_request(250, -1)
 
         lbl_logo = Gtk.Label(label="󰓇  YouTube Music")
         lbl_logo.get_style_context().add_class("yt-logo")
@@ -451,9 +483,9 @@ class YTMusicProWindow(Gtk.Window):
 
         sidebar.pack_start(lbl_logo, False, False, 0)
 
-        # Nav items
-        nav_items = [("🏠", "Home", True), ("🧭", "Explore", False), ("📚", "Library", False),
-                     ("📥", "Downloads", False), ("🕒", "History", False), ("❤️", "Liked Songs", False)]
+        # Primary Menu
+        nav_items = [("🏠", "Home", True), ("🧭", "Explore", False), ("🔍", "Search", False),
+                     ("📚", "Library", False), ("📥", "Downloads", False), ("❤️", "Liked Songs", False), ("🕒", "History", False)]
         for icon, name, is_active in nav_items:
             btn = Gtk.Button(label=f"{icon}  {name}")
             btn.get_style_context().add_class("nav-item")
@@ -462,55 +494,65 @@ class YTMusicProWindow(Gtk.Window):
             btn.set_halign(Gtk.Align.FILL)
             sidebar.pack_start(btn, False, False, 0)
 
-        # Playlists section
+        # Playlists & Albums
         lbl_pl_hdr = Gtk.Label(label="PLAYLISTS")
         lbl_pl_hdr.get_style_context().add_class("section-hdr")
         lbl_pl_hdr.set_halign(Gtk.Align.START)
         sidebar.pack_start(lbl_pl_hdr, False, False, 0)
 
-        playlists = [("My Favorites", "128 songs", False), ("Anime OST", "86 songs", False),
-                     ("Persona 3 Reload", "24 songs", True), ("Chill Vibes", "52 songs", False)]
+        playlists = [("Persona 3 Reload OST", "24 songs", True), ("Synthwave Cyberpunk", "128 songs", False),
+                     ("Anime OST Collection", "86 songs", False), ("Chill Lofi Beats", "52 songs", False), ("Workout Beast Mode", "31 songs", False)]
         for p_title, p_sub, is_act in playlists:
-            p_btn = Gtk.Button(label=f"🎵 {p_title}")
+            p_btn = Gtk.Button(label=f"🎵  {p_title}")
             p_btn.get_style_context().add_class("playlist-item")
             if is_act:
                 p_btn.get_style_context().add_class("active")
             p_btn.set_halign(Gtk.Align.FILL)
             sidebar.pack_start(p_btn, False, False, 0)
 
-        # Profile Footer
-        profile_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        # Profile Footer (Bottom Sidebar)
+        profile_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         profile_box.get_style_context().add_class("user-profile")
-        profile_box.set_margin_top(20)
 
-        lbl_user_icon = Gtk.Label(label="👤")
-        user_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        lbl_avatar = Gtk.Label(label="👤")
+        lbl_avatar.get_style_context().add_class("btn-icon-soft")
+
+        user_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        u_name_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         lbl_u_name = Gtk.Label(label="Zaki")
         lbl_u_name.get_style_context().add_class("song-title")
         lbl_u_name.set_halign(Gtk.Align.START)
+
+        lbl_badge = Gtk.Label(label="PRO")
+        lbl_badge.get_style_context().add_class("badge-premium")
+
+        u_name_row.pack_start(lbl_u_name, False, False, 0)
+        u_name_row.pack_start(lbl_badge, False, False, 0)
+
         lbl_u_email = Gtk.Label(label="zaki@example.com")
         lbl_u_email.get_style_context().add_class("song-album-lg")
         lbl_u_email.set_halign(Gtk.Align.START)
 
-        user_info.pack_start(lbl_u_name, False, False, 0)
+        user_info.pack_start(u_name_row, False, False, 0)
         user_info.pack_start(lbl_u_email, False, False, 0)
-        profile_box.pack_start(lbl_user_icon, False, False, 0)
+
+        profile_box.pack_start(lbl_avatar, False, False, 0)
         profile_box.pack_start(user_info, True, True, 0)
 
         sidebar.pack_end(profile_box, False, False, 0)
 
         # 2. RIGHT MAIN WORKSPACE
         main_workspace = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        main_workspace.set_margin_start(16)
-        main_workspace.set_margin_end(16)
+        main_workspace.set_margin_start(20)
+        main_workspace.set_margin_end(20)
         main_workspace.set_margin_top(16)
         main_workspace.set_margin_bottom(16)
 
-        # Top Header Bar: Search & Actions
-        header_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        # Top Bar: Search Bar & Actions
+        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
         self.entry_search = Gtk.Entry()
-        self.entry_search.set_placeholder_text("🔍 Search songs, albums, artists...")
+        self.entry_search.set_placeholder_text("🔍 Search songs, artists, albums...")
         self.entry_search.get_style_context().add_class("search-entry")
         self.entry_search.set_hexpand(True)
         self.entry_search.connect("activate", self.on_search)
@@ -518,6 +560,12 @@ class YTMusicProWindow(Gtk.Window):
         btn_search = Gtk.Button(label="Search")
         btn_search.get_style_context().add_class("btn-search")
         btn_search.connect("clicked", self.on_search)
+
+        btn_notif = Gtk.Button(label="🔔")
+        btn_notif.get_style_context().add_class("btn-icon-soft")
+
+        btn_settings = Gtk.Button(label="⚙️")
+        btn_settings.get_style_context().add_class("btn-icon-soft")
 
         btn_fullscreen = Gtk.Button(label="⛶")
         btn_fullscreen.get_style_context().add_class("btn-icon-soft")
@@ -527,61 +575,68 @@ class YTMusicProWindow(Gtk.Window):
         btn_close.get_style_context().add_class("btn-icon-soft")
         btn_close.connect("clicked", lambda w: Gtk.main_quit())
 
-        header_bar.pack_start(self.entry_search, True, True, 0)
-        header_bar.pack_start(btn_search, False, False, 0)
-        header_bar.pack_start(btn_fullscreen, False, False, 0)
-        header_bar.pack_start(btn_close, False, False, 0)
+        top_bar.pack_start(self.entry_search, True, True, 0)
+        top_bar.pack_start(btn_search, False, False, 0)
+        top_bar.pack_start(btn_notif, False, False, 0)
+        top_bar.pack_start(btn_settings, False, False, 0)
+        top_bar.pack_start(btn_fullscreen, False, False, 0)
+        top_bar.pack_start(btn_close, False, False, 0)
 
-        # Middle Area: Center Hero Card (Left) + Right Up Next Panel (Right)
-        mid_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        # Center Area: Center Hero Card + Right Up Next Panel
+        mid_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
 
         # CENTER HERO CARD
-        self.hero_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.hero_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         self.hero_card.get_style_context().add_class("hero-card")
         self.hero_card.set_hexpand(True)
 
-        top_hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
+        top_hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
 
-        # Cover Art
+        # Large Artwork
         self.img_cover = Gtk.Image()
         self.img_cover.get_style_context().add_class("cover-art-lg")
-        self.img_cover.set_size_request(210, 210)
+        self.img_cover.set_size_request(220, 220)
         self.set_default_cover()
 
-        # Track metadata
-        meta_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        # Metadata
+        meta_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         meta_box.set_valign(Gtk.Align.CENTER)
 
-        lbl_badge = Gtk.Label(label="ilil PLAYING NOW")
-        lbl_badge.get_style_context().add_class("badge-playing")
-        lbl_badge.set_halign(Gtk.Align.START)
+        lbl_badge_play = Gtk.Label(label="ilil PLAYING NOW")
+        lbl_badge_play.get_style_context().add_class("badge-playing")
+        lbl_badge_play.set_halign(Gtk.Align.START)
 
         self.lbl_song_hero = Gtk.Label(label="Color Your Night")
         self.lbl_song_hero.get_style_context().add_class("song-title-lg")
         self.lbl_song_hero.set_halign(Gtk.Align.START)
         self.lbl_song_hero.set_line_wrap(True)
 
-        self.lbl_artist_hero = Gtk.Label(label="Lotus Juice")
+        self.lbl_artist_hero = Gtk.Label(label="Lotus Juice - Topic")
         self.lbl_artist_hero.get_style_context().add_class("song-artist-lg")
         self.lbl_artist_hero.set_halign(Gtk.Align.START)
 
-        self.lbl_album_hero = Gtk.Label(label="Persona 3 Reload OST")
+        self.lbl_album_hero = Gtk.Label(label="Persona 3 Reload OST • 2024")
         self.lbl_album_hero.get_style_context().add_class("song-album-lg")
         self.lbl_album_hero.set_halign(Gtk.Align.START)
 
-        actions_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        actions_row.set_margin_top(8)
+        actions_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        actions_row.set_margin_top(10)
 
         btn_like = Gtk.Button(label="❤️")
         btn_like.get_style_context().add_class("btn-icon-soft")
-        btn_download_lg = Gtk.Button(label="📥 Download")
-        btn_download_lg.get_style_context().add_class("btn-clear-queue")
+
+        btn_download_lg = Gtk.Button(label="⬇ Download MP3")
+        btn_download_lg.get_style_context().add_class("btn-action-outline")
         btn_download_lg.connect("clicked", self.on_download_current)
+
+        btn_share = Gtk.Button(label="🔗 Share")
+        btn_share.get_style_context().add_class("btn-action-outline")
 
         actions_row.pack_start(btn_like, False, False, 0)
         actions_row.pack_start(btn_download_lg, False, False, 0)
+        actions_row.pack_start(btn_share, False, False, 0)
 
-        meta_box.pack_start(lbl_badge, False, False, 0)
+        meta_box.pack_start(lbl_badge_play, False, False, 0)
         meta_box.pack_start(self.lbl_song_hero, False, False, 0)
         meta_box.pack_start(self.lbl_artist_hero, False, False, 0)
         meta_box.pack_start(self.lbl_album_hero, False, False, 0)
@@ -593,8 +648,8 @@ class YTMusicProWindow(Gtk.Window):
         # Waveform Visualizer
         self.visualizer = AnimatedWaveformVisualizer()
 
-        # Progress slider inside hero
-        progress_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        # Hero Progress Bar
+        progress_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         self.lbl_time = Gtk.Label(label="00:00")
         self.lbl_time.get_style_context().add_class("song-album-lg")
 
@@ -610,8 +665,8 @@ class YTMusicProWindow(Gtk.Window):
         progress_box.pack_start(self.scale_progress, True, True, 0)
         progress_box.pack_start(self.lbl_dur, False, False, 0)
 
-        # Control Row inside Hero
-        ctrl_hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        # Controls Row inside Hero
+        ctrl_hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         ctrl_hero.set_halign(Gtk.Align.CENTER)
 
         btn_shuf = Gtk.Button(label="🔀")
@@ -643,12 +698,12 @@ class YTMusicProWindow(Gtk.Window):
         self.hero_card.pack_start(progress_box, False, False, 0)
         self.hero_card.pack_start(ctrl_hero, False, False, 0)
 
-        # RIGHT PANEL: UP NEXT / QUEUE
-        right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        # RIGHT PANEL: UP NEXT / SEARCH (~340px)
+        right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         right_panel.get_style_context().add_class("right-panel")
         right_panel.set_size_request(340, -1)
 
-        # Tabs: UP NEXT | RELATED | SEARCH
+        # Tabs Header
         right_tab_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.btn_upnext = Gtk.Button(label="UP NEXT")
         self.btn_upnext.get_style_context().add_class("tab-btn-lg")
@@ -662,7 +717,7 @@ class YTMusicProWindow(Gtk.Window):
         right_tab_hdr.pack_start(self.btn_upnext, True, True, 0)
         right_tab_hdr.pack_start(self.btn_search_results, True, True, 0)
 
-        # Right Stack (Queue vs Search)
+        # Right Stack
         self.right_stack = Gtk.Stack()
         self.right_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
 
@@ -682,7 +737,7 @@ class YTMusicProWindow(Gtk.Window):
         self.right_stack.add_named(scrolled_search, "search")
 
         btn_clear_q = Gtk.Button(label="🗑 Clear Queue")
-        btn_clear_q.get_style_context().add_class("btn-clear-queue")
+        btn_clear_q.get_style_context().add_class("btn-action-outline")
         btn_clear_q.connect("clicked", self.on_clear_queue)
 
         right_panel.pack_start(right_tab_hdr, False, False, 0)
@@ -692,17 +747,86 @@ class YTMusicProWindow(Gtk.Window):
         mid_hbox.pack_start(self.hero_card, True, True, 0)
         mid_hbox.pack_start(right_panel, False, False, 0)
 
-        main_workspace.pack_start(header_bar, False, False, 0)
+        main_workspace.pack_start(top_bar, False, False, 0)
         main_workspace.pack_start(mid_hbox, True, True, 0)
 
         body_hbox.pack_start(sidebar, False, False, 0)
         body_hbox.pack_start(main_workspace, True, True, 0)
 
+        # 3. BOTTOM MINI PLAYER BAR
+        mini_player = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        mini_player.get_style_context().add_class("bottom-player-bar")
+
+        # Left track info
+        mini_left = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.img_mini_cover = Gtk.Image()
+        self.img_mini_cover.set_size_request(44, 44)
+        self.img_mini_cover.get_style_context().add_class("cover-art")
+
+        mini_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        mini_info.set_valign(Gtk.Align.CENTER)
+        self.lbl_mini_song = Gtk.Label(label="Color Your Night")
+        self.lbl_mini_song.get_style_context().add_class("song-title")
+        self.lbl_mini_song.set_halign(Gtk.Align.START)
+        self.lbl_mini_song.set_max_width_chars(25)
+
+        self.lbl_mini_artist = Gtk.Label(label="Lotus Juice")
+        self.lbl_mini_artist.get_style_context().add_class("song-album-lg")
+        self.lbl_mini_artist.set_halign(Gtk.Align.START)
+
+        mini_info.pack_start(self.lbl_mini_song, False, False, 0)
+        mini_info.pack_start(self.lbl_mini_artist, False, False, 0)
+
+        mini_left.pack_start(self.img_mini_cover, False, False, 0)
+        mini_left.pack_start(mini_info, False, False, 0)
+
+        # Center mini controls
+        mini_center = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        mini_center.set_valign(Gtk.Align.CENTER)
+
+        btn_m_prev = Gtk.Button(label="⏮")
+        btn_m_prev.get_style_context().add_class("btn-icon-soft")
+        btn_m_prev.connect("clicked", lambda w: self.play_prev_track())
+
+        self.btn_m_play = Gtk.Button(label="󰐊")
+        self.btn_m_play.get_style_context().add_class("btn-search")
+        self.btn_m_play.connect("clicked", self.on_toggle_play)
+
+        btn_m_next = Gtk.Button(label="⏭")
+        btn_m_next.get_style_context().add_class("btn-icon-soft")
+        btn_m_next.connect("clicked", lambda w: self.play_next_track())
+
+        mini_center.pack_start(btn_m_prev, False, False, 0)
+        mini_center.pack_start(self.btn_m_play, False, False, 0)
+        mini_center.pack_start(btn_m_next, False, False, 0)
+
+        # Right volume & extras
+        mini_right = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        mini_right.set_valign(Gtk.Align.CENTER)
+
+        lbl_vol = Gtk.Label(label="🔊")
+        scale_vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        scale_vol.set_value(80)
+        scale_vol.set_draw_value(False)
+        scale_vol.set_size_request(90, -1)
+
+        btn_queue_toggle = Gtk.Button(label="📜")
+        btn_queue_toggle.get_style_context().add_class("btn-icon-soft")
+
+        mini_right.pack_start(lbl_vol, False, False, 0)
+        mini_right.pack_start(scale_vol, False, False, 0)
+        mini_right.pack_start(btn_queue_toggle, False, False, 0)
+
+        mini_player.pack_start(mini_left, False, False, 0)
+        mini_player.pack_start(mini_center, True, True, 0)
+        mini_player.pack_start(mini_right, False, False, 0)
+
         root_vbox.pack_start(body_hbox, True, True, 0)
+        root_vbox.pack_start(mini_player, False, False, 0)
 
         self.add(root_vbox)
 
-        # Initial default song
+        # Initial default track
         default_track = {
             'id': 'bpOSxM0rNPM',
             'title': 'Color Your Night',
@@ -717,9 +841,12 @@ class YTMusicProWindow(Gtk.Window):
         GLib.timeout_add(1000, self.update_playback_status)
 
     def set_default_cover(self):
-        pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 210, 210)
+        pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 220, 220)
         pixbuf.fill(0x161624ff)
         self.img_cover.set_from_pixbuf(pixbuf)
+        if hasattr(self, 'img_mini_cover'):
+            mini_pix = pixbuf.scale_simple(44, 44, GdkPixbuf.InterpType.BILINEAR)
+            self.img_mini_cover.set_from_pixbuf(mini_pix)
 
     def load_cover_art_async(self, thumb_url):
         def _fetch():
@@ -730,8 +857,10 @@ class YTMusicProWindow(Gtk.Window):
                 loader.write(data)
                 loader.close()
                 pixbuf = loader.get_pixbuf()
-                scaled = pixbuf.scale_simple(210, 210, GdkPixbuf.InterpType.BILINEAR)
+                scaled = pixbuf.scale_simple(220, 220, GdkPixbuf.InterpType.BILINEAR)
+                mini_scaled = pixbuf.scale_simple(44, 44, GdkPixbuf.InterpType.BILINEAR)
                 GLib.idle_add(self.img_cover.set_from_pixbuf, scaled)
+                GLib.idle_add(self.img_mini_cover.set_from_pixbuf, mini_scaled)
             except Exception as e:
                 print("Failed to load cover art:", e)
 
@@ -757,7 +886,7 @@ class YTMusicProWindow(Gtk.Window):
             self.results_box.remove(child)
 
         lbl_loading = Gtk.Label(label="Searching YouTube Music...")
-        lbl_loading.get_style_context().add_class("song-artist")
+        lbl_loading.get_style_context().add_class("song-artist-lg")
         self.results_box.pack_start(lbl_loading, False, False, 0)
         self.results_box.show_all()
 
@@ -793,7 +922,7 @@ class YTMusicProWindow(Gtk.Window):
         for child in self.results_box.get_children():
             self.results_box.remove(child)
         lbl = Gtk.Label(label=f"Search failed: {err_msg}")
-        lbl.get_style_context().add_class("song-artist")
+        lbl.get_style_context().add_class("song-artist-lg")
         self.results_box.pack_start(lbl, False, False, 0)
         self.results_box.show_all()
 
@@ -803,7 +932,7 @@ class YTMusicProWindow(Gtk.Window):
 
         if not results:
             lbl = Gtk.Label(label="No songs found")
-            lbl.get_style_context().add_class("song-artist")
+            lbl.get_style_context().add_class("song-artist-lg")
             self.results_box.pack_start(lbl, False, False, 0)
         else:
             for item in results:
@@ -817,18 +946,18 @@ class YTMusicProWindow(Gtk.Window):
                 lbl_t.set_line_wrap(True)
 
                 lbl_a = Gtk.Label(label=item['artist'])
-                lbl_a.get_style_context().add_class("song-artist")
+                lbl_a.get_style_context().add_class("song-album-lg")
                 lbl_a.set_halign(Gtk.Align.START)
 
                 info_box.pack_start(lbl_t, False, False, 0)
                 info_box.pack_start(lbl_a, False, False, 0)
 
                 btn_p = Gtk.Button(label="▶ Play")
-                btn_p.get_style_context().add_class("btn-download")
+                btn_p.get_style_context().add_class("btn-action-outline")
                 btn_p.connect("clicked", self._create_play_callback(item))
 
                 btn_q = Gtk.Button(label="+ Queue")
-                btn_q.get_style_context().add_class("btn-clear-queue")
+                btn_q.get_style_context().add_class("btn-action-outline")
                 btn_q.connect("clicked", self._create_add_queue_callback(item))
 
                 card.pack_start(info_box, True, True, 0)
@@ -866,9 +995,10 @@ class YTMusicProWindow(Gtk.Window):
 
             self.lbl_song_hero.set_text(item['title'])
             self.lbl_artist_hero.set_text(item['artist'])
-            self.lbl_status.set_text("⏳ Extracting stream...")
-            self.load_cover_art_async(item['thumb'])
+            self.lbl_mini_song.set_text(item['title'])
+            self.lbl_mini_artist.set_text(item['artist'])
 
+            self.load_cover_art_async(item['thumb'])
             self.render_queue_list()
 
             page_url = f"https://www.youtube.com/watch?v={item['id']}"
@@ -877,8 +1007,6 @@ class YTMusicProWindow(Gtk.Window):
     def play_next_track(self):
         if self.queue_index + 1 < len(self.queue):
             self.play_track_at_index(self.queue_index + 1)
-        else:
-            self.lbl_status.set_text("🔚 End of Queue")
 
     def play_prev_track(self):
         if self.queue_index - 1 >= 0:
@@ -890,7 +1018,7 @@ class YTMusicProWindow(Gtk.Window):
 
         if not self.queue:
             lbl = Gtk.Label(label="Queue is empty")
-            lbl.get_style_context().add_class("song-artist")
+            lbl.get_style_context().add_class("song-album-lg")
             lbl.set_margin_top(40)
             self.queue_box.pack_start(lbl, False, False, 0)
         else:
@@ -903,7 +1031,7 @@ class YTMusicProWindow(Gtk.Window):
 
                 prefix = "ilil " if idx == self.queue_index else f"#{idx+1} "
                 lbl_num = Gtk.Label(label=prefix)
-                lbl_num.get_style_context().add_class("badge-playing" if idx == self.queue_index else "song-artist")
+                lbl_num.get_style_context().add_class("badge-playing" if idx == self.queue_index else "song-album-lg")
 
                 info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
                 lbl_t = Gtk.Label(label=item['title'])
@@ -912,14 +1040,14 @@ class YTMusicProWindow(Gtk.Window):
                 lbl_t.set_line_wrap(True)
 
                 lbl_a = Gtk.Label(label=item['artist'])
-                lbl_a.get_style_context().add_class("song-artist")
+                lbl_a.get_style_context().add_class("song-album-lg")
                 lbl_a.set_halign(Gtk.Align.START)
 
                 info_box.pack_start(lbl_t, False, False, 0)
                 info_box.pack_start(lbl_a, False, False, 0)
 
                 btn_p = Gtk.Button(label="▶")
-                btn_p.get_style_context().add_class("btn-download")
+                btn_p.get_style_context().add_class("btn-action-outline")
                 btn_p.connect("clicked", lambda w, i=idx: self.play_track_at_index(i))
 
                 btn_del = Gtk.Button(label="✕")
@@ -961,17 +1089,17 @@ class YTMusicProWindow(Gtk.Window):
                 self.mpv.play(page_url)
                 GLib.idle_add(self._on_play_started)
         except Exception as e:
-            GLib.idle_add(self.lbl_status.set_text, "❌ Stream error")
+            pass
 
     def _on_play_started(self):
-        self.lbl_status.set_text("▶ Playing")
         self.btn_play_main.set_label("󰏤")
+        self.btn_m_play.set_label("󰏤")
         self.visualizer.is_playing = True
 
     def on_toggle_play(self, widget):
         paused = self.mpv.toggle_pause()
         self.btn_play_main.set_label("󰐊" if paused else "󰏤")
-        self.lbl_status.set_text("⏸ Paused" if paused else "▶ Playing")
+        self.btn_m_play.set_label("󰐊" if paused else "󰏤")
         self.visualizer.is_playing = not paused
 
     def on_download_current(self, widget):
