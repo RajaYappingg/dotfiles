@@ -4,6 +4,7 @@ import sys
 import time
 import json
 import socket
+import random
 import threading
 import subprocess
 import urllib.parse
@@ -28,11 +29,11 @@ CSS = b"""
 }
 
 window.yt-window {
-    background-color: #10101a;
+    background-color: #0f0f17;
 }
 
 .yt-panel {
-    background-color: #10101a;
+    background-color: #0f0f17;
     padding: 20px;
 }
 
@@ -70,6 +71,25 @@ window.yt-window {
 
 .btn-search:hover {
     background-color: #ff2a75;
+}
+
+.tab-btn {
+    background-color: transparent;
+    color: rgba(255, 255, 255, 0.60);
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.tab-btn:hover {
+    color: #ffffff;
+}
+
+.tab-btn.active {
+    color: #ff0055;
+    border-bottom: 2px solid #ff0055;
 }
 
 .cover-art {
@@ -133,6 +153,21 @@ window.yt-window {
     color: #ffffff;
 }
 
+.btn-queue-add {
+    background-color: rgba(122, 162, 247, 0.20);
+    color: #7aa2f7;
+    border: 1px solid rgba(122, 162, 247, 0.45);
+    border-radius: 12px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.btn-queue-add:hover {
+    background-color: rgba(122, 162, 247, 0.40);
+    color: #ffffff;
+}
+
 .result-card {
     background-color: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -144,6 +179,14 @@ window.yt-window {
 .result-card:hover {
     background-color: rgba(255, 255, 255, 0.12);
     border-color: rgba(255, 255, 255, 0.25);
+}
+
+.queue-card-active {
+    background-color: rgba(255, 0, 85, 0.15);
+    border: 1px solid rgba(255, 0, 85, 0.40);
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin-bottom: 6px;
 }
 
 .btn-header {
@@ -260,8 +303,8 @@ class MPVController:
 class YTMusicPlayerWindow(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self.set_title("YouTube Music")
-        self.set_default_size(540, 680)
+        self.set_title("YouTube Music Desktop")
+        self.set_default_size(580, 720)
 
         self.get_style_context().add_class("yt-window")
         self.connect("destroy", self.on_window_close)
@@ -276,11 +319,11 @@ class YTMusicPlayerWindow(Gtk.Window):
         )
 
         self.mpv = MPVController()
-        self.current_video_id = None
-        self.current_title = "No Track Playing"
-        self.current_artist = "Search for a song below"
-        self.current_url = None
+        self.queue = []
+        self.queue_index = -1
+        self.current_item = None
         self.is_user_seeking = False
+        self.is_track_ending = False
 
         # Main Panel
         self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
@@ -332,13 +375,13 @@ class YTMusicPlayerWindow(Gtk.Window):
         self.img_cover.set_size_request(200, 200)
         self.set_default_cover()
 
-        self.lbl_song = Gtk.Label(label=self.current_title)
+        self.lbl_song = Gtk.Label(label="No Track Playing")
         self.lbl_song.get_style_context().add_class("song-title")
         self.lbl_song.set_line_wrap(True)
         self.lbl_song.set_max_width_chars(35)
         self.lbl_song.set_justify(Gtk.Justification.CENTER)
 
-        self.lbl_artist = Gtk.Label(label=self.current_artist)
+        self.lbl_artist = Gtk.Label(label="Search for a song below")
         self.lbl_artist.get_style_context().add_class("song-artist")
 
         # Progress bar slider
@@ -358,19 +401,29 @@ class YTMusicPlayerWindow(Gtk.Window):
         progress_box.pack_start(self.scale_progress, True, True, 0)
         progress_box.pack_start(self.lbl_dur, False, False, 0)
 
-        # Controls Row
-        ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        # Controls Row: Prev, Play, Next, Download
+        ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         ctrl_box.set_halign(Gtk.Align.CENTER)
+
+        btn_prev = Gtk.Button(label="⏮")
+        btn_prev.get_style_context().add_class("btn-ctrl")
+        btn_prev.connect("clicked", lambda w: self.play_prev_track())
 
         self.btn_play = Gtk.Button(label="󰐊")
         self.btn_play.get_style_context().add_class("btn-play")
         self.btn_play.connect("clicked", self.on_toggle_play)
 
+        btn_next = Gtk.Button(label="⏭")
+        btn_next.get_style_context().add_class("btn-ctrl")
+        btn_next.connect("clicked", lambda w: self.play_next_track())
+
         btn_download = Gtk.Button(label="📥 Download MP3")
         btn_download.get_style_context().add_class("btn-download")
         btn_download.connect("clicked", self.on_download_current)
 
+        ctrl_box.pack_start(btn_prev, False, False, 0)
         ctrl_box.pack_start(self.btn_play, False, False, 0)
+        ctrl_box.pack_start(btn_next, False, False, 0)
         ctrl_box.pack_start(btn_download, False, False, 0)
 
         player_card.pack_start(self.img_cover, False, False, 0)
@@ -379,23 +432,64 @@ class YTMusicPlayerWindow(Gtk.Window):
         player_card.pack_start(progress_box, False, False, 0)
         player_card.pack_start(ctrl_box, False, False, 0)
 
-        # Search Results List
-        self.scrolled = Gtk.ScrolledWindow()
-        self.scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.scrolled.set_vexpand(True)
+        # Tab Switcher Header (Search Results vs Queue Playlist)
+        tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
 
+        self.btn_tab_search = Gtk.Button(label="🔍 Search Results")
+        self.btn_tab_search.get_style_context().add_class("tab-btn")
+        self.btn_tab_search.get_style_context().add_class("active")
+        self.btn_tab_search.connect("clicked", lambda w: self.switch_view(0))
+
+        self.btn_tab_queue = Gtk.Button(label="📜 Up Next (Queue: 0)")
+        self.btn_tab_queue.get_style_context().add_class("tab-btn")
+        self.btn_tab_queue.connect("clicked", lambda w: self.switch_view(1))
+
+        tabs_box.pack_start(self.btn_tab_search, True, True, 0)
+        tabs_box.pack_start(self.btn_tab_queue, True, True, 0)
+
+        # Stack Container for Tab Switching
+        self.stack = Gtk.Stack()
+        self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.stack.set_transition_duration(200)
+
+        # Page 0: Search Results List
+        scrolled_search = Gtk.ScrolledWindow()
+        scrolled_search.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled_search.set_vexpand(True)
         self.results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self.scrolled.add(self.results_box)
+        scrolled_search.add(self.results_box)
+
+        # Page 1: Queue Playlist List
+        scrolled_queue = Gtk.ScrolledWindow()
+        scrolled_queue.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled_queue.set_vexpand(True)
+        self.queue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        scrolled_queue.add(self.queue_box)
+
+        self.stack.add_named(scrolled_search, "search")
+        self.stack.add_named(scrolled_queue, "queue")
 
         self.panel.pack_start(header, False, False, 0)
         self.panel.pack_start(search_box, False, False, 0)
         self.panel.pack_start(player_card, False, False, 0)
-        self.panel.pack_start(self.scrolled, True, True, 0)
+        self.panel.pack_start(tabs_box, False, False, 0)
+        self.panel.pack_start(self.stack, True, True, 0)
 
         self.add(self.panel)
+        self.render_queue_list()
         self.show_all()
 
         GLib.timeout_add(1000, self.update_playback_status)
+
+    def switch_view(self, index):
+        if index == 0:
+            self.btn_tab_search.get_style_context().add_class("active")
+            self.btn_tab_queue.get_style_context().remove_class("active")
+            self.stack.set_visible_child_name("search")
+        else:
+            self.btn_tab_queue.get_style_context().add_class("active")
+            self.btn_tab_search.get_style_context().remove_class("active")
+            self.stack.set_visible_child_name("queue")
 
     def on_window_close(self, widget):
         self.mpv.stop()
@@ -427,6 +521,7 @@ class YTMusicPlayerWindow(Gtk.Window):
         if not query:
             return
 
+        self.switch_view(0)
         for child in self.results_box.get_children():
             self.results_box.remove(child)
 
@@ -501,27 +596,124 @@ class YTMusicPlayerWindow(Gtk.Window):
                 btn_p.get_style_context().add_class("btn-download")
                 btn_p.connect("clicked", self._create_play_callback(item))
 
+                btn_q = Gtk.Button(label="+ Queue")
+                btn_q.get_style_context().add_class("btn-queue-add")
+                btn_q.connect("clicked", self._create_add_queue_callback(item))
+
                 card.pack_start(info_box, True, True, 0)
                 card.pack_start(btn_p, False, False, 0)
+                card.pack_start(btn_q, False, False, 0)
                 self.results_box.pack_start(card, False, False, 0)
 
         self.results_box.show_all()
 
     def _create_play_callback(self, item):
-        return lambda widget: self.play_song(item)
+        return lambda widget: self.play_now(item)
 
-    def play_song(self, item):
-        self.current_video_id = item['id']
-        self.current_title = item['title']
-        self.current_artist = item['artist']
-        self.current_url = f"https://www.youtube.com/watch?v={item['id']}"
+    def _create_add_queue_callback(self, item):
+        return lambda widget: self.add_to_queue(item)
 
-        self.lbl_song.set_text(self.current_title)
-        self.lbl_artist.set_text(self.current_artist)
-        self.lbl_status.set_text("⏳ Extracting audio stream...")
-        self.load_cover_art_async(item['thumb'])
+    def add_to_queue(self, item):
+        self.queue.append(item)
+        self.btn_tab_queue.set_label(f"📜 Up Next (Queue: {len(self.queue)})")
+        self.render_queue_list()
+        subprocess.run(["notify-send", "➕ Queue Updated", f"Added '{item['title']}' to Up Next Queue!"])
 
-        threading.Thread(target=self._extract_and_play_async, args=(self.current_url,), daemon=True).start()
+    def play_now(self, item):
+        # Insert or play immediately
+        if item in self.queue:
+            self.queue_index = self.queue.index(item)
+        else:
+            self.queue.append(item)
+            self.queue_index = len(self.queue) - 1
+
+        self.play_track_at_index(self.queue_index)
+
+    def play_track_at_index(self, index):
+        if 0 <= index < len(self.queue):
+            self.queue_index = index
+            item = self.queue[index]
+            self.current_item = item
+
+            self.lbl_song.set_text(item['title'])
+            self.lbl_artist.set_text(item['artist'])
+            self.lbl_status.set_text("⏳ Extracting audio stream...")
+            self.load_cover_art_async(item['thumb'])
+
+            self.btn_tab_queue.set_label(f"📜 Up Next (Queue: {len(self.queue)})")
+            self.render_queue_list()
+
+            page_url = f"https://www.youtube.com/watch?v={item['id']}"
+            threading.Thread(target=self._extract_and_play_async, args=(page_url,), daemon=True).start()
+
+    def play_next_track(self):
+        if self.queue_index + 1 < len(self.queue):
+            self.play_track_at_index(self.queue_index + 1)
+        else:
+            self.lbl_status.set_text("🔚 End of Queue")
+
+    def play_prev_track(self):
+        if self.queue_index - 1 >= 0:
+            self.play_track_at_index(self.queue_index - 1)
+
+    def render_queue_list(self):
+        for child in self.queue_box.get_children():
+            self.queue_box.remove(child)
+
+        if not self.queue:
+            lbl = Gtk.Label(label="Queue is empty. Search and add songs to Up Next!")
+            lbl.get_style_context().add_class("song-artist")
+            lbl.set_margin_top(40)
+            self.queue_box.pack_start(lbl, False, False, 0)
+        else:
+            for idx, item in enumerate(self.queue):
+                card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                if idx == self.queue_index:
+                    card.get_style_context().add_class("queue-card-active")
+                else:
+                    card.get_style_context().add_class("result-card")
+
+                lbl_num = Gtk.Label(label=f"#{idx+1}")
+                lbl_num.get_style_context().add_class("song-artist")
+
+                info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                title_prefix = "▶ " if idx == self.queue_index else ""
+                lbl_t = Gtk.Label(label=f"{title_prefix}{item['title']}")
+                lbl_t.get_style_context().add_class("song-title")
+                lbl_t.set_halign(Gtk.Align.START)
+                lbl_t.set_line_wrap(True)
+
+                lbl_a = Gtk.Label(label=item['artist'])
+                lbl_a.get_style_context().add_class("song-artist")
+                lbl_a.set_halign(Gtk.Align.START)
+
+                info_box.pack_start(lbl_t, False, False, 0)
+                info_box.pack_start(lbl_a, False, False, 0)
+
+                btn_p = Gtk.Button(label="▶ Play")
+                btn_p.get_style_context().add_class("btn-download")
+                btn_p.connect("clicked", lambda w, i=idx: self.play_track_at_index(i))
+
+                btn_del = Gtk.Button(label="✕")
+                btn_del.get_style_context().add_class("btn-header")
+                btn_del.connect("clicked", lambda w, i=idx: self.remove_from_queue(i))
+
+                card.pack_start(lbl_num, False, False, 0)
+                card.pack_start(info_box, True, True, 0)
+                card.pack_start(btn_p, False, False, 0)
+                card.pack_start(btn_del, False, False, 0)
+
+                self.queue_box.pack_start(card, False, False, 0)
+
+        self.queue_box.show_all()
+
+    def remove_from_queue(self, index):
+        if 0 <= index < len(self.queue):
+            del self.queue[index]
+            if self.queue_index >= len(self.queue):
+                self.queue_index = max(0, len(self.queue) - 1)
+            self.btn_tab_queue.set_label(f"📜 Up Next (Queue: {len(self.queue)})")
+            self.render_queue_list()
 
     def _extract_and_play_async(self, page_url):
         try:
@@ -549,23 +741,24 @@ class YTMusicPlayerWindow(Gtk.Window):
         self.lbl_status.set_text("⏸ Paused" if paused else "▶ Playing")
 
     def on_download_current(self, widget):
-        if not self.current_video_id or not self.current_url:
+        if not self.current_item:
             return
 
         def _download():
             try:
-                subprocess.run(["notify-send", "📥 YT Music Downloader", f"Downloading '{self.current_title}'..."])
+                subprocess.run(["notify-send", "📥 YT Music Downloader", f"Downloading '{self.current_item['title']}'..."])
                 music_dir = os.path.expanduser("~/Music")
                 os.makedirs(music_dir, exist_ok=True)
 
                 out_path = os.path.join(music_dir, "%(title)s.%(ext)s")
+                page_url = f"https://www.youtube.com/watch?v={self.current_item['id']}"
                 res = subprocess.run([
                     "yt-dlp", "-x", "--audio-format", "mp3",
-                    "-o", out_path, self.current_url
+                    "-o", out_path, page_url
                 ], capture_output=True)
 
                 if res.returncode == 0:
-                    subprocess.run(["notify-send", "✅ Download Complete", f"Saved '{self.current_title}' to ~/Music!"])
+                    subprocess.run(["notify-send", "✅ Download Complete", f"Saved '{self.current_item['title']}' to ~/Music!"])
                 else:
                     subprocess.run(["notify-send", "❌ Download Failed", "yt-dlp error during download."])
             except Exception as e:
@@ -605,7 +798,21 @@ class YTMusicPlayerWindow(Gtk.Window):
             self.lbl_time.set_text(f"{pos_min:02d}:{pos_sec:02d}")
             self.lbl_dur.set_text(f"{dur_min:02d}:{dur_sec:02d}")
 
+            # Auto-advance queue when track finishes
+            if dur - pos <= 1.5 and pos > 5:
+                if not self.is_track_ending:
+                    self.is_track_ending = True
+                    GLib.timeout_add(1500, self._auto_advance_track)
+        else:
+            self.is_track_ending = False
+
         return True
+
+    def _auto_advance_track(self):
+        self.is_track_ending = False
+        if self.queue_index + 1 < len(self.queue):
+            self.play_next_track()
+        return False
 
     def on_key_press(self, widget, event):
         if event.keyval == Gdk.KEY_Escape:
