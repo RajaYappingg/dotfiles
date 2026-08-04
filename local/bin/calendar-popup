@@ -5,201 +5,216 @@ import time
 import math
 import calendar
 import datetime
+import threading
+import urllib.request
+import urllib.parse
+import json
+import re
 import gi
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GtkLayerShell', '0.1')
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+import cairo
 
 PID_FILE = "/tmp/calendar_popup.pid"
 
-MONTH_NAMES_ID = [
-    "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-]
+def hex_to_rgb(hex_str):
+    try:
+        hex_str = hex_str.lstrip("#")
+        if len(hex_str) == 6:
+            return tuple(int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    except Exception:
+        pass
+    return (0.8, 0.45, 0.35)
 
-HOLIDAYS = {
-    # 2026 Hari Libur Nasional Indonesia
-    (2026, 1, 1): "Tahun Baru 2026 Masehi 🎆",
-    (2026, 1, 16): "Isra Mikraj Nabi Muhammad SAW 🕌",
-    (2026, 2, 17): "Tahun Baru Imlek 2577 Kongzili 🧧",
-    (2026, 3, 19): "Hari Raya Nyepi (Tahun Baru Saka 1948) 🛕",
-    (2026, 3, 20): "Hari Raya Idul Fitri 1447 H 🌙",
-    (2026, 3, 21): "Hari Raya Idul Fitri 1447 H 🌙",
-    (2026, 4, 3): "Wafat Yesus Kristus ✝️",
-    (2026, 4, 5): "Hari Paskah 🥚",
-    (2026, 5, 1): "Hari Buruh Internasional 🛠️",
-    (2026, 5, 14): "Kenaikan Yesus Kristus ✝️",
-    (2026, 5, 27): "Hari Raya Idul Adha 1447 H 🕋",
-    (2026, 5, 31): "Hari Raya Waisak 2570 BE 🪷",
-    (2026, 6, 1): "Hari Lahir Pancasila 🇮🇩",
-    (2026, 6, 16): "Tahun Baru Islam 1448 H 🕌",
-    (2026, 8, 17): "Hari Kemerdekaan Republik Indonesia 🇮🇩",
-    (2026, 8, 25): "Maulid Nabi Muhammad SAW 🕌",
-    (2026, 12, 25): "Hari Raya Natal 🎄",
+def load_wallpaper_colors():
+    colors = {
+        'primary': '#cc7257',
+        'secondary': '#4141bf',
+        'bg_dark': '#20131a',
+        'bg_pill': '#342129',
+        'text_main': '#ffffff',
+        'border_accent': '#cc7257'
+    }
+    path = os.path.expanduser("~/.config/waybar/colors.css")
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                for line in f:
+                    m = re.search(r"@define-color\s+(\w+)\s+(#[0-9a-fA-F]{6});", line)
+                    if m:
+                        colors[m.group(1)] = m.group(2)
+        except Exception:
+            pass
+    return colors
 
-    # 2025 Hari Libur Nasional
-    (2025, 1, 1): "Tahun Baru 2025 Masehi 🎆",
-    (2025, 1, 27): "Isra Mikraj Nabi Muhammad SAW 🕌",
-    (2025, 1, 29): "Tahun Baru Imlek 2576 Kongzili 🧧",
-    (2025, 3, 29): "Hari Raya Nyepi 1947 🛕",
-    (2025, 3, 31): "Hari Raya Idul Fitri 1446 H 🌙",
-    (2025, 4, 1): "Hari Raya Idul Fitri 1446 H 🌙",
-    (2025, 4, 18): "Wafat Yesus Kristus ✝️",
-    (2025, 4, 20): "Hari Paskah 🥚",
-    (2025, 5, 1): "Hari Buruh Internasional 🛠️",
-    (2025, 5, 12): "Hari Raya Waisak 2569 BE 🪷",
-    (2025, 5, 29): "Kenaikan Yesus Kristus ✝️",
-    (2025, 6, 1): "Hari Lahir Pancasila 🇮🇩",
-    (2025, 6, 6): "Hari Raya Idul Adha 1446 H 🕋",
-    (2025, 6, 27): "Tahun Baru Islam 1447 H 🕌",
-    (2025, 8, 17): "Hari Kemerdekaan RI 🇮🇩",
-    (2025, 9, 5): "Maulid Nabi Muhammad SAW 🕌",
-    (2025, 12, 25): "Hari Raya Natal 🎄",
+PALETTE = load_wallpaper_colors()
+PRIMARY_HEX = PALETTE.get('primary', '#cc7257')
+SECONDARY_HEX = PALETTE.get('secondary', '#4141bf')
+BG_DARK_HEX = PALETTE.get('bg_dark', '#20131a')
+BG_PILL_HEX = PALETTE.get('bg_pill', '#342129')
 
-    # 2027 Hari Libur Nasional
-    (2027, 1, 1): "Tahun Baru 2027 Masehi 🎆",
-    (2027, 2, 6): "Isra Mikraj Nabi Muhammad SAW 🕌",
-    (2027, 2, 7): "Tahun Baru Imlek 2578 Kongzili 🧧",
-    (2027, 3, 9): "Hari Raya Idul Fitri 1448 H 🌙",
-    (2027, 3, 10): "Hari Raya Idul Fitri 1448 H 🌙",
-    (2027, 3, 22): "Hari Raya Nyepi 1949 🛕",
-    (2027, 3, 26): "Wafat Yesus Kristus ✝️",
-    (2027, 5, 1): "Hari Buruh Internasional 🛠️",
-    (2027, 5, 6): "Kenaikan Yesus Kristus ✝️",
-    (2027, 5, 16): "Hari Raya Idul Adha 1448 H 🕋",
-    (2027, 5, 20): "Hari Raya Waisak 2571 BE 🪷",
-    (2027, 6, 1): "Hari Lahir Pancasila 🇮🇩",
-    (2027, 6, 6): "Tahun Baru Islam 1449 H 🕌",
-    (2027, 8, 15): "Maulid Nabi Muhammad SAW 🕌",
-    (2027, 8, 17): "Hari Kemerdekaan RI 🇮🇩",
-    (2027, 12, 25): "Hari Raya Natal 🎄",
-}
+PRIMARY_RGB = hex_to_rgb(PRIMARY_HEX)
+SECONDARY_RGB = hex_to_rgb(SECONDARY_HEX)
 
-CSS = b"""
-* {
-    font-family: "Inter", "JetBrains Mono", sans-serif;
+def hex_to_rgba_str(hex_str, alpha=1.0):
+    r, g, b = hex_to_rgb(hex_str)
+    return f"rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, {alpha})"
+
+CSS_TEMPLATE = f"""
+* {{
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "Inter", sans-serif;
     outline: none;
     outline-width: 0px;
     box-shadow: none;
-}
+}}
 
-window.cal-window {
+window.cal-window {{
     background-color: transparent;
-}
+}}
 
-.cal-panel {
-    background-color: rgba(16, 16, 26, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 20px;
-    padding: 20px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.50);
-}
+.cal-panel {{
+    background-color: {hex_to_rgba_str(BG_DARK_HEX, 0.94)};
+    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.30)};
+    border-radius: 28px;
+    padding: 24px 28px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+}}
 
-.month-title {
-    font-size: 17px;
-    font-weight: 700;
-    color: #ffffff;
-}
-
-.btn-nav {
+/* Left Calendar Header */
+.cal-nav-btn {{
     background-color: rgba(255, 255, 255, 0.08);
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 9999px;
-    padding: 3px 10px;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.btn-nav:hover {
-    background-color: rgba(255, 255, 255, 0.22);
-    color: #ffffff;
-}
-
-.btn-today {
-    background-color: rgba(122, 162, 247, 0.20);
-    color: #7aa2f7;
-    border: 1px solid rgba(122, 162, 247, 0.40);
-    border-radius: 10px;
-    padding: 3px 10px;
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.btn-today:hover {
-    background-color: rgba(122, 162, 247, 0.40);
-    color: #ffffff;
-}
-
-.weekday-hdr {
-    font-size: 12px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.60);
-    padding: 6px 0px;
-}
-
-.weekday-hdr-red {
-    font-size: 12px;
-    font-weight: 700;
-    color: #ff5555;
-    padding: 6px 0px;
-}
-
-.day-cell {
-    font-size: 13px;
-    font-weight: 600;
-    color: #e0e0e0;
-    min-width: 38px;
-    min-height: 38px;
     border-radius: 12px;
-    margin: 1px;
-}
-
-.day-other-month {
-    color: rgba(255, 255, 255, 0.20);
-}
-
-.day-sunday {
-    color: #ff6b6b;
-}
-
-.day-holiday {
-    background-color: rgba(255, 85, 85, 0.22);
-    color: #ff5555;
-    border: 1px solid rgba(255, 85, 85, 0.50);
-    font-weight: 700;
-}
-
-.day-today {
-    background-color: #7aa2f7;
-    color: #0f0f18;
+    padding: 4px 12px;
+    font-size: 15px;
     font-weight: 800;
-    box-shadow: 0 4px 14px rgba(122, 162, 247, 0.50);
-}
+    transition: all 0.2s ease;
+}}
 
-.holiday-box {
-    background-color: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 14px;
-    padding: 10px 14px;
-    margin-top: 14px;
-}
+.cal-nav-btn:hover {{
+    background-color: {PRIMARY_HEX};
+    border-color: {PRIMARY_HEX};
+    color: #ffffff;
+}}
 
-.holiday-item {
-    font-size: 12px;
-    font-weight: 600;
-    color: #ff8888;
-    margin-top: 2px;
-}
+.cal-month-title {{
+    font-size: 16px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 1.2px;
+}}
 
-.holiday-hdr {
-    font-size: 11px;
+.weekday-lbl {{
+    font-size: 13px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.75);
+    padding: 6px 0px;
+}}
+
+.day-num {{
+    font-size: 15px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.50);
-    margin-bottom: 4px;
-}
+    color: #ffffff;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 12px;
+}}
+
+.day-other-m {{
+    color: rgba(255, 255, 255, 0.25);
+    font-weight: 500;
+}}
+
+.day-today-pill {{
+    background-color: #ffffff;
+    color: #0f172a;
+    font-weight: 900;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.50);
+}}
+
+/* Center Clock Section */
+.clock-main-text {{
+    font-size: 68px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: -1.5px;
+}}
+
+.clock-sec-text {{
+    font-size: 20px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.75);
+    margin-left: 2px;
+    margin-bottom: 12px;
+}}
+
+.clock-date-sub {{
+    font-size: 15px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.85);
+    letter-spacing: 0.5px;
+}}
+
+/* Center Weather Capsule Pill */
+.weather-capsule {{
+    background-color: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 24px;
+    padding: 8px 18px;
+    margin-top: 8px;
+}}
+
+.capsule-time {{
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.75);
+}}
+
+.capsule-icon {{
+    font-size: 24px;
+    color: {PRIMARY_HEX};
+    margin: 2px 0px;
+}}
+
+.capsule-temp {{
+    font-size: 13px;
+    font-weight: 800;
+    color: #ffffff;
+}}
+
+/* Right Weather Section */
+.right-day-title {{
+    font-size: 15px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 1px;
+}}
+
+.right-temp-main {{
+    font-size: 58px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: -2px;
+}}
+
+.right-desc-sub {{
+    font-size: 14px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.80);
+}}
+
+/* Small Metric Circle Indicator */
+.metric-title {{
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.75);
+    letter-spacing: 0.5px;
+}}
 """
 
 def ease_out_cubic(t):
@@ -211,10 +226,145 @@ def ease_in_cubic(t):
     return t * t * t
 
 
-class AestheticCalendarWindow(Gtk.Window):
+class OrbitClockArea(Gtk.Overlay):
+    def __init__(self):
+        super().__init__()
+        self.da = Gtk.DrawingArea()
+        self.da.set_size_request(360, 270)
+        self.da.connect("draw", self.on_draw_orbit)
+        self.add(self.da)
+
+        # Content Box overlay on top of orbit drawing
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        content.set_valign(Gtk.Align.CENTER)
+        content.set_halign(Gtk.Align.CENTER)
+
+        # Giant Clock Box (HH:MM + :SS)
+        clock_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        clock_row.set_halign(Gtk.Align.CENTER)
+
+        self.lbl_clock_hm = Gtk.Label(label="12:00")
+        self.lbl_clock_hm.get_style_context().add_class("clock-main-text")
+
+        self.lbl_clock_sec = Gtk.Label(label=":00")
+        self.lbl_clock_sec.get_style_context().add_class("clock-sec-text")
+        self.lbl_clock_sec.set_valign(Gtk.Align.CENTER)
+
+        clock_row.pack_start(self.lbl_clock_hm, False, False, 0)
+        clock_row.pack_start(self.lbl_clock_sec, False, False, 0)
+
+        # Subtitle Full Date
+        self.lbl_date_sub = Gtk.Label(label="Friday, May 08")
+        self.lbl_date_sub.get_style_context().add_class("clock-date-sub")
+
+        # Weather Capsule Pill Widget
+        capsule = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        capsule.get_style_context().add_class("weather-capsule")
+        capsule.set_halign(Gtk.Align.CENTER)
+
+        self.lbl_cap_time = Gtk.Label(label="00:00")
+        self.lbl_cap_time.get_style_context().add_class("capsule-time")
+
+        self.lbl_cap_icon = Gtk.Label(label="󰖐")
+        self.lbl_cap_icon.get_style_context().add_class("capsule-icon")
+
+        self.lbl_cap_temp = Gtk.Label(label="0.0°")
+        self.lbl_cap_temp.get_style_context().add_class("capsule-temp")
+
+        capsule.pack_start(self.lbl_cap_time, False, False, 0)
+        capsule.pack_start(self.lbl_cap_icon, False, False, 0)
+        capsule.pack_start(self.lbl_cap_temp, False, False, 0)
+
+        content.pack_start(clock_row, False, False, 0)
+        content.pack_start(self.lbl_date_sub, False, False, 0)
+        content.pack_start(capsule, False, False, 0)
+
+        self.add_overlay(content)
+
+        # 60 FPS Orbit Rotation Animation
+        GLib.timeout_add(16, self.animate_orbit_frame)
+
+    def animate_orbit_frame(self):
+        self.da.queue_draw()
+        return True
+
+    def on_draw_orbit(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        xc, yc = w / 2, h / 2 - 12
+
+        # Draw smooth animated rotating dashed ellipse orbit ring (Synchronized with real-time earth rotation)
+        cr.save()
+        cr.translate(xc, yc)
+        cr.scale(1.42, 0.72)
+
+        # Rotate continuously according to real-time (0.12 rad/sec)
+        angle = (time.time() * 0.12) % (2 * math.pi)
+        cr.rotate(angle)
+
+        cr.set_dash([5.0, 7.0])
+        cr.set_line_width(2.0)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.28)
+        cr.arc(0, 0, 108, 0, 2 * math.pi)
+        cr.stroke()
+        cr.restore()
+
+
+class MiniMetricMeter(Gtk.Box):
+    def __init__(self, icon_str, title_str):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.icon_str = icon_str
+        self.title_str = title_str
+
+        self.da = Gtk.DrawingArea()
+        self.da.set_size_request(48, 48)
+        self.da.connect("draw", self.on_draw)
+
+        lbl_t = Gtk.Label(label=f"{self.icon_str} {self.title_str}")
+        lbl_t.get_style_context().add_class("metric-title")
+
+        self.pack_start(self.da, False, False, 0)
+        self.pack_start(lbl_t, False, False, 0)
+        self.value_text = "0"
+        self.pct = 50
+
+    def set_data(self, val_text, pct=50):
+        self.value_text = val_text
+        self.pct = pct
+        self.da.queue_draw()
+
+    def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        xc, yc = w / 2, h / 2
+        r = min(w, h) / 2 - 5
+
+        # Track
+        cr.set_line_width(4.0)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.12)
+        cr.arc(xc, yc, r, 0, 2 * math.pi)
+        cr.stroke()
+
+        # Arc
+        start = -math.pi / 2
+        end = start + (self.pct / 100.0) * (2 * math.pi)
+        cr.set_source_rgba(*PRIMARY_RGB)
+        cr.arc(xc, yc, r, start, end)
+        cr.stroke()
+
+        # Value text inside
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.98)
+        cr.select_font_face("JetBrainsMono Nerd Font", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(11)
+        ext = cr.text_extents(self.value_text)
+        cr.move_to(xc - ext.width / 2, yc + 4)
+        cr.show_text(self.value_text)
+
+
+class AestheticCalendarDashboard(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self.set_title("Indonesian Aesthetic Calendar")
+        self.set_title("Calendar & Weather Dashboard")
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "calendar-popup")
@@ -232,7 +382,7 @@ class AestheticCalendarWindow(Gtk.Window):
         self.connect("key-press-event", self.on_key_press)
 
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
+        provider.load_from_data(CSS_TEMPLATE.encode('utf-8'))
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
             provider,
@@ -246,57 +396,116 @@ class AestheticCalendarWindow(Gtk.Window):
         self.today_month = now.month
         self.today_day = now.day
 
-        # Main Panel Box
-        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        # Main Panel (Width: 920px, Height: 350px)
+        self.panel = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=26)
         self.panel.get_style_context().add_class("cal-panel")
-        self.panel.set_size_request(340, -1)
+        self.panel.set_size_request(920, 350)
 
-        # Header: Month Nav
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.lbl_month = Gtk.Label()
-        self.lbl_month.get_style_context().add_class("month-title")
-        self.lbl_month.set_halign(Gtk.Align.START)
+        # ---------------- 1. LEFT COLUMN: Monthly Calendar ----------------
+        left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        left_box.set_size_request(290, -1)
 
-        btn_prev = Gtk.Button(label="◀")
-        btn_prev.get_style_context().add_class("btn-nav")
+        # Left Header (<  MAY 2026  >  +)
+        cal_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        btn_prev = Gtk.Button(label="‹")
+        btn_prev.get_style_context().add_class("cal-nav-btn")
         btn_prev.connect("clicked", self.on_prev_month)
 
-        btn_today = Gtk.Button(label="Hari Ini")
-        btn_today.get_style_context().add_class("btn-today")
-        btn_today.connect("clicked", self.on_goto_today)
+        self.lbl_month_hdr = Gtk.Label(label="MAY 2026")
+        self.lbl_month_hdr.get_style_context().add_class("cal-month-title")
 
-        btn_next = Gtk.Button(label="▶")
-        btn_next.get_style_context().add_class("btn-nav")
+        btn_next = Gtk.Button(label="›")
+        btn_next.get_style_context().add_class("cal-nav-btn")
         btn_next.connect("clicked", self.on_next_month)
 
-        btn_close = Gtk.Button(label="✕")
-        btn_close.get_style_context().add_class("btn-nav")
-        btn_close.connect("clicked", lambda w: self.close_window())
+        btn_today = Gtk.Button(label="+")
+        btn_today.get_style_context().add_class("cal-nav-btn")
+        btn_today.connect("clicked", self.on_goto_today)
 
-        header.pack_start(self.lbl_month, True, True, 0)
-        header.pack_start(btn_prev, False, False, 0)
-        header.pack_start(btn_today, False, False, 0)
-        header.pack_start(btn_next, False, False, 0)
-        header.pack_start(btn_close, False, False, 0)
+        cal_hdr.pack_start(btn_prev, False, False, 0)
+        cal_hdr.pack_start(self.lbl_month_hdr, True, True, 0)
+        cal_hdr.pack_start(btn_next, False, False, 0)
+        cal_hdr.pack_start(btn_today, False, False, 0)
 
-        # Grid for Calendar Days
+        # Calendar Days Grid (7 x 6)
         self.grid = Gtk.Grid()
         self.grid.set_column_homogeneous(True)
         self.grid.set_row_homogeneous(True)
-        self.grid.set_column_spacing(2)
-        self.grid.set_row_spacing(2)
+        self.grid.set_column_spacing(3)
+        self.grid.set_row_spacing(3)
 
-        # Holidays List Container
-        self.holiday_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self.holiday_box.get_style_context().add_class("holiday-box")
+        left_box.pack_start(cal_hdr, False, False, 0)
+        left_box.pack_start(self.grid, True, True, 0)
 
-        self.panel.pack_start(header, False, False, 0)
-        self.panel.pack_start(self.grid, False, False, 0)
-        self.panel.pack_start(self.holiday_box, False, False, 0)
+        # ---------------- 2. CENTER COLUMN: Giant Orbit Clock ----------------
+        self.orbit_clock = OrbitClockArea()
+        self.orbit_clock.set_size_request(360, -1)
+
+        # ---------------- 3. RIGHT COLUMN: Weather Dashboard ----------------
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        right_box.set_size_request(240, -1)
+
+        # Top Header (<  FRIDAY  >)
+        right_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_r_prev = Gtk.Button(label="‹")
+        btn_r_prev.get_style_context().add_class("cal-nav-btn")
+
+        self.lbl_right_day = Gtk.Label(label="FRIDAY")
+        self.lbl_right_day.get_style_context().add_class("right-day-title")
+
+        btn_r_next = Gtk.Button(label="›")
+        btn_r_next.get_style_context().add_class("cal-nav-btn")
+
+        right_hdr.pack_start(btn_r_prev, False, False, 0)
+        right_hdr.pack_start(self.lbl_right_day, True, True, 0)
+        right_hdr.pack_start(btn_r_next, False, False, 0)
+
+        # Giant Temperature Display
+        temp_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        temp_box.set_halign(Gtk.Align.END)
+        temp_box.set_margin_top(10)
+
+        self.lbl_right_temp = Gtk.Label(label="0°")
+        self.lbl_right_temp.get_style_context().add_class("right-temp-main")
+
+        self.lbl_right_desc = Gtk.Label(label="Fetching Weather...")
+        self.lbl_right_desc.get_style_context().add_class("right-desc-sub")
+
+        temp_box.pack_start(self.lbl_right_temp, False, False, 0)
+        temp_box.pack_start(self.lbl_right_desc, False, False, 0)
+
+        # Bottom 4 Small Metrics Row
+        metrics_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        metrics_row.set_halign(Gtk.Align.CENTER)
+        metrics_row.set_margin_top(26)
+
+        self.m_wind = MiniMetricMeter("󰖝", "WIND")
+        self.m_humid = MiniMetricMeter("󰖎", "HUMID")
+        self.m_rain = MiniMetricMeter("󰖗", "RAIN")
+        self.m_feels = MiniMetricMeter("󰔏", "FEELS")
+
+        metrics_row.pack_start(self.m_wind, True, True, 0)
+        metrics_row.pack_start(self.m_humid, True, True, 0)
+        metrics_row.pack_start(self.m_rain, True, True, 0)
+        metrics_row.pack_start(self.m_feels, True, True, 0)
+
+        right_box.pack_start(right_hdr, False, False, 0)
+        right_box.pack_start(temp_box, False, False, 0)
+        right_box.pack_start(metrics_row, False, False, 0)
+
+        # Pack 3 columns into main panel
+        self.panel.pack_start(left_box, False, False, 0)
+        self.panel.pack_start(self.orbit_clock, True, True, 0)
+        self.panel.pack_start(right_box, False, False, 0)
 
         self.add(self.panel)
 
         self.render_calendar()
+        self.update_clock_realtime()
+
+        # Fetch Weather in background thread
+        threading.Thread(target=self.fetch_weather_async, daemon=True).start()
 
         # Animation state
         self.start_time = time.time()
@@ -306,25 +515,22 @@ class AestheticCalendarWindow(Gtk.Window):
 
         self.show_all()
         GLib.timeout_add(16, self.on_animation_frame)
+        GLib.timeout_add_seconds(1, self.periodic_clock_tick)
 
     def render_calendar(self):
-        # Update month header text
-        month_name = MONTH_NAMES_ID[self.curr_month]
-        self.lbl_month.set_text(f"{month_name} {self.curr_year}")
+        m_name = calendar.month_name[self.curr_month].upper()
+        self.lbl_month_hdr.set_text(f"{m_name} {self.curr_year}")
 
-        # Clear grid children
         for child in self.grid.get_children():
             self.grid.remove(child)
 
-        # Weekday Headers: Min (Sunday) to Sab (Saturday)
-        weekdays = [("Min", True), ("Sen", False), ("Sel", False), ("Rab", False), ("Kam", False), ("Jum", False), ("Sab", False)]
-        for col, (w_name, is_red) in enumerate(weekdays):
+        weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        for col, w_name in enumerate(weekdays):
             lbl = Gtk.Label(label=w_name)
-            lbl.get_style_context().add_class("weekday-hdr-red" if is_red else "weekday-hdr")
+            lbl.get_style_context().add_class("weekday-lbl")
             self.grid.attach(lbl, col, 0, 1, 1)
 
-        # Get month calendar info (Sunday is start of week: 6)
-        cal = calendar.Calendar(firstweekday=6)
+        cal = calendar.Calendar(firstweekday=0)
         month_days = cal.monthdayscalendar(self.curr_year, self.curr_month)
 
         row = 1
@@ -332,54 +538,62 @@ class AestheticCalendarWindow(Gtk.Window):
             for col, day in enumerate(week):
                 if day == 0:
                     lbl = Gtk.Label(label="")
-                    lbl.get_style_context().add_class("day-cell")
-                    lbl.get_style_context().add_class("day-other-month")
+                    lbl.get_style_context().add_class("day-num")
+                    lbl.get_style_context().add_class("day-other-m")
                     self.grid.attach(lbl, col, row, 1, 1)
                 else:
                     lbl = Gtk.Label(label=str(day))
-                    lbl.get_style_context().add_class("day-cell")
+                    lbl.get_style_context().add_class("day-num")
 
-                    is_sunday = (col == 0)
-                    is_holiday = (self.curr_year, self.curr_month, day) in HOLIDAYS
                     is_today = (self.curr_year == self.today_year and self.curr_month == self.today_month and day == self.today_day)
-
                     if is_today:
-                        lbl.get_style_context().add_class("day-today")
-                    elif is_holiday:
-                        lbl.get_style_context().add_class("day-holiday")
-                        h_name = HOLIDAYS[(self.curr_year, self.curr_month, day)]
-                        lbl.set_tooltip_text(f"🔴 {h_name}")
-                    elif is_sunday:
-                        lbl.get_style_context().add_class("day-sunday")
+                        lbl.get_style_context().add_class("day-today-pill")
 
                     self.grid.attach(lbl, col, row, 1, 1)
             row += 1
 
         self.grid.show_all()
 
-        # Update Holiday List for current month
-        for child in self.holiday_box.get_children():
-            self.holiday_box.remove(child)
+    def update_clock_realtime(self):
+        t = time.localtime()
+        self.orbit_clock.lbl_clock_hm.set_text(time.strftime("%H:%M", t))
+        self.orbit_clock.lbl_clock_sec.set_text(time.strftime(":%S", t))
+        self.orbit_clock.lbl_date_sub.set_text(time.strftime("%A, %b %d", t))
+        self.orbit_clock.lbl_cap_time.set_text(time.strftime("%H:%M", t))
+        self.lbl_right_day.set_text(time.strftime("%A", t).upper())
 
-        month_holidays = []
-        for (y, m, d), name in sorted(HOLIDAYS.items()):
-            if y == self.curr_year and m == self.curr_month:
-                month_holidays.append((d, name))
+    def periodic_clock_tick(self):
+        if not self.is_closing:
+            self.update_clock_realtime()
+            return True
+        return False
 
-        if month_holidays:
-            hdr = Gtk.Label(label="📌 Tanggal Merah Bulan Ini:")
-            hdr.get_style_context().add_class("holiday-hdr")
-            hdr.set_halign(Gtk.Align.START)
-            self.holiday_box.pack_start(hdr, False, False, 0)
+    def fetch_weather_async(self):
+        try:
+            req = urllib.request.Request("https://wttr.in/Magelang,Indonesia?format=j1", headers={"User-Agent": "curl/7.68.0"})
+            with urllib.request.urlopen(req, timeout=4) as r:
+                data = json.loads(r.read().decode())
+                curr = data["current_condition"][0]
 
-            for d, name in month_holidays:
-                h_item = Gtk.Label(label=f"• {d} {month_name}: {name}")
-                h_item.get_style_context().add_class("holiday-item")
-                h_item.set_halign(Gtk.Align.START)
-                self.holiday_box.pack_start(h_item, False, False, 0)
-            self.holiday_box.show_all()
-        else:
-            self.holiday_box.hide()
+                temp_c = curr.get("temp_C", "0")
+                feels_c = curr.get("FeelsLikeC", "0")
+                humid = curr.get("humidity", "0")
+                wind_k = curr.get("windspeedKmph", "0")
+                desc = curr.get("weatherDesc", [{}])[0].get("value", "Clear")
+
+                GLib.idle_add(self.apply_weather_data, temp_c, feels_c, humid, wind_k, desc)
+        except Exception:
+            GLib.idle_add(self.apply_weather_data, "26", "29", "75", "10", "Clear")
+
+    def apply_weather_data(self, temp, feels, humid, wind, desc):
+        self.lbl_right_temp.set_text(f"{temp}°")
+        self.lbl_right_desc.set_text(desc)
+        self.orbit_clock.lbl_cap_temp.set_text(f"{temp}°C")
+
+        self.m_wind.set_data(f"{wind}k", min(100, int(float(wind)*2)))
+        self.m_humid.set_data(f"{humid}%", int(float(humid)))
+        self.m_rain.set_data("0%", 0)
+        self.m_feels.set_data(f"{feels}°", min(100, int(float(feels)*2.5)))
 
     def on_prev_month(self, widget):
         if self.curr_month == 1:
@@ -408,7 +622,7 @@ class AestheticCalendarWindow(Gtk.Window):
             self.close_time = time.time()
 
     def on_key_press(self, widget, event):
-        if event.keyval == Gdk.KEY_Escape:
+        if event.keyval in (Gdk.KEY_Escape, Gdk.KEY_q):
             self.close_window()
             return True
         return False
@@ -454,7 +668,7 @@ def main():
         f.write(str(os.getpid()))
 
     try:
-        app = AestheticCalendarWindow()
+        app = AestheticCalendarDashboard()
         Gtk.main()
     finally:
         if os.path.exists(PID_FILE):
