@@ -201,21 +201,21 @@ scale slider {{
     margin: 0px;
 }}
 
-/* Power Buttons Grid - Vibrant Colored Resting & Hover States */
+/* Power Buttons Grid - Sleek, Compact, Aligned */
 button.power-btn {{
     background-image: none;
-    border-radius: 18px;
-    min-height: 60px;
-    min-width: 76px;
-    font-size: 22px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 14px;
+    min-height: 42px;
+    padding: 4px 0px;
+    font-size: 17px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.20);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 button.power-btn-lock {{
     background-image: none;
-    background-color: {hex_to_rgba_str(PRIMARY_HEX, 0.22)};
-    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.50)};
+    background-color: {hex_to_rgba_str(PRIMARY_HEX, 0.18)};
+    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.40)};
     color: {PRIMARY_HEX};
 }}
 
@@ -224,13 +224,13 @@ button.power-btn-lock:hover {{
     background-color: {PRIMARY_HEX};
     border-color: {PRIMARY_HEX};
     color: {BG_DARK_HEX};
-    box-shadow: 0 4px 22px {hex_to_rgba_str(PRIMARY_HEX, 0.70)};
+    box-shadow: 0 4px 18px {hex_to_rgba_str(PRIMARY_HEX, 0.65)};
 }}
 
 button.power-btn-sleep {{
     background-image: none;
-    background-color: rgba(168, 85, 247, 0.22);
-    border: 1px solid rgba(168, 85, 247, 0.50);
+    background-color: rgba(168, 85, 247, 0.18);
+    border: 1px solid rgba(168, 85, 247, 0.40);
     color: #d8b4fe;
 }}
 
@@ -239,13 +239,13 @@ button.power-btn-sleep:hover {{
     background-color: #a855f7;
     border-color: #a855f7;
     color: #ffffff;
-    box-shadow: 0 4px 22px rgba(168, 85, 247, 0.70);
+    box-shadow: 0 4px 18px rgba(168, 85, 247, 0.65);
 }}
 
 button.power-btn-reboot {{
     background-image: none;
-    background-color: rgba(59, 130, 246, 0.22);
-    border: 1px solid rgba(59, 130, 246, 0.50);
+    background-color: rgba(59, 130, 246, 0.18);
+    border: 1px solid rgba(59, 130, 246, 0.40);
     color: #93c5fd;
 }}
 
@@ -254,13 +254,13 @@ button.power-btn-reboot:hover {{
     background-color: #3b82f6;
     border-color: #3b82f6;
     color: #ffffff;
-    box-shadow: 0 4px 22px rgba(59, 130, 246, 0.70);
+    box-shadow: 0 4px 18px rgba(59, 130, 246, 0.65);
 }}
 
 button.power-btn-red {{
     background-image: none;
-    background-color: rgba(239, 68, 68, 0.22);
-    border: 1px solid rgba(239, 68, 68, 0.50);
+    background-color: rgba(239, 68, 68, 0.18);
+    border: 1px solid rgba(239, 68, 68, 0.40);
     color: #fca5a5;
 }}
 
@@ -269,15 +269,15 @@ button.power-btn-red:hover {{
     background-color: #ef4444;
     border-color: #ef4444;
     color: #ffffff;
-    box-shadow: 0 4px 22px rgba(239, 68, 68, 0.70);
+    box-shadow: 0 4px 18px rgba(239, 68, 68, 0.65);
 }}
 
 /* Power Mode Selector Bar */
 .mode-bar {{
-    background-color: {hex_to_rgba_str(PRIMARY_HEX, 0.10)};
-    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.30)};
-    border-radius: 18px;
-    padding: 6px;
+    background-color: {hex_to_rgba_str(PRIMARY_HEX, 0.08)};
+    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.25)};
+    border-radius: 16px;
+    padding: 4px;
 }}
 
 .mode-btn {{
@@ -526,8 +526,8 @@ class NotificationCenterDashboard(Gtk.Window):
         sliders_box.pack_start(v_row, False, False, 0)
 
         # C. Power Controls Row (Lock: 󰌾, Suspend: 󰒲, Reboot: 󰑐, Shutdown: 󰐥)
-        power_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        power_box.set_halign(Gtk.Align.CENTER)
+        power_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        power_box.set_homogeneous(True)
 
         btn_lock = Gtk.Button(label="󰌾")
         btn_lock.get_style_context().add_class("power-btn")
@@ -557,7 +557,7 @@ class NotificationCenterDashboard(Gtk.Window):
         # D. Power Mode Selector Bar (Perform: 󰓅, Balance: 󰾆, Saver: 󰌪)
         mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         mode_box.get_style_context().add_class("mode-bar")
-        mode_box.set_halign(Gtk.Align.CENTER)
+        mode_box.set_homogeneous(True)
 
         self.btn_perform = Gtk.Button(label="󰓅 Perform")
         self.btn_perform.get_style_context().add_class("mode-btn")
