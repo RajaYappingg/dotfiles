@@ -445,7 +445,7 @@ class AestheticCalendarDashboard(Gtk.Window):
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "calendar-popup")
-        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.TOP)
         if hasattr(GtkLayerShell, "set_keyboard_mode"):
             GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
         else:
