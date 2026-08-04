@@ -446,46 +446,61 @@ def ease_in_cubic(t):
     return t * t * t
 
 
-class StatCard(Gtk.EventBox):
-    def __init__(self, title, icon, color_class):
+class ThickRadialGauge(Gtk.DrawingArea):
+    def __init__(self, title, icon, color_rgb):
         super().__init__()
         self.title = title
         self.icon = icon
-        self.set_visible_window(True)
+        self.color_rgb = color_rgb
+        self.value_str = "0%"
+        self.pct = 0
+        self.set_size_request(130, 130)
+        self.connect("draw", self.on_draw)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.get_style_context().add_class("stat-card")
-        box.get_style_context().add_class(color_class)
+    def set_val(self, pct, value_str=None):
+        self.pct = max(0, min(100, pct))
+        self.value_str = value_str if value_str is not None else f"{int(self.pct)}%"
+        self.queue_draw()
 
-        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        lbl_icon = Gtk.Label(label=icon, xalign=0)
-        lbl_icon.get_style_context().add_class("stat-card-icon")
+    def on_draw(self, widget, cr):
+        w = self.get_allocated_width()
+        h = self.get_allocated_height()
+        xc, yc = w / 2, (h / 2) - 10
+        r = min(w, h) / 2 - 16
 
-        lbl_title = Gtk.Label(label=title, xalign=1)
-        lbl_title.get_style_context().add_class("stat-card-title")
+        # 1. Dark Recessed Track (Thick: 14px)
+        cr.set_line_width(14)
+        cr.set_line_cap(cairo.LINE_CAP_BUTT)
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.45)
+        cr.arc(xc, yc, r, 0, 2 * math.pi)
+        cr.stroke()
 
-        top_row.pack_start(lbl_icon, False, False, 0)
-        top_row.pack_end(lbl_title, False, False, 0)
+        # 2. Thick Colored Progress Arc
+        if self.pct > 0:
+            start = -math.pi / 2
+            end = start + (self.pct / 100.0) * (2 * math.pi)
+            cr.set_line_width(14)
+            cr.set_line_cap(cairo.LINE_CAP_BUTT)
+            cr.set_source_rgba(*self.color_rgb)
+            cr.arc(xc, yc, r, start, end)
+            cr.stroke()
 
-        bottom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.lbl_sub = Gtk.Label(label="", xalign=0)
-        self.lbl_sub.get_style_context().add_class("stat-card-sub")
+        # 3. Center Text: Icon + Big Percentage
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+        cr.select_font_face("JetBrainsMono Nerd Font", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(15)
 
-        self.lbl_val = Gtk.Label(label="0%", xalign=1)
-        self.lbl_val.get_style_context().add_class("stat-card-val")
+        txt = f"{self.icon} {self.value_str}"
+        ext = cr.text_extents(txt)
+        cr.move_to(xc - ext.width / 2, yc + 5)
+        cr.show_text(txt)
 
-        bottom_row.pack_start(self.lbl_sub, False, False, 0)
-        bottom_row.pack_end(self.lbl_val, True, True, 0)
-
-        box.pack_start(top_row, False, False, 0)
-        box.pack_start(bottom_row, True, True, 0)
-
-        self.add(box)
-
-    def set_val(self, val_str, sub_str=""):
-        self.lbl_val.set_text(str(val_str))
-        if sub_str:
-            self.lbl_sub.set_text(str(sub_str))
+        # 4. Subtitle below ring
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.55)
+        cr.set_font_size(10)
+        ext_t = cr.text_extents(self.title)
+        cr.move_to(xc - ext_t.width / 2, h - 2)
+        cr.show_text(self.title)
 
 
 class NotificationCenterDashboard(Gtk.Window):
@@ -574,17 +589,17 @@ class NotificationCenterDashboard(Gtk.Window):
         right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         right_col.set_size_request(340, -1)
 
-        # A. 2x2 Imperative-Dots Catppuccin Stat Cards Grid
+        # A. 2x2 Thick Circular Donut Gauges Grid
         gauges_grid = Gtk.Grid()
-        gauges_grid.set_column_spacing(12)
-        gauges_grid.set_row_spacing(12)
+        gauges_grid.set_column_spacing(18)
+        gauges_grid.set_row_spacing(16)
         gauges_grid.set_column_homogeneous(True)
         gauges_grid.set_row_homogeneous(True)
 
-        self.g_cpu = StatCard("CPU", "󰍛", "stat-card-blue")
-        self.g_mem = StatCard("RAM", "󰘚", "stat-card-mauve")
-        self.g_disk = StatCard("DISK", "󰋊", "stat-card-teal")
-        self.g_temp = StatCard("TEMP", "󰔏", "stat-card-peach")
+        self.g_cpu = ThickRadialGauge("CPU LOAD", "󰍛", hex_to_rgb("#89b4fa"))
+        self.g_mem = ThickRadialGauge("MEMORY", "󰘚", hex_to_rgb("#cba6f7"))
+        self.g_disk = ThickRadialGauge("STORAGE", "󰋊", hex_to_rgb("#74c7ec"))
+        self.g_temp = ThickRadialGauge("SYSTEM TEMP", "󰔏", hex_to_rgb("#fab387"))
 
         gauges_grid.attach(self.g_cpu, 0, 0, 1, 1)
         gauges_grid.attach(self.g_mem, 1, 0, 1, 1)
@@ -761,7 +776,7 @@ class NotificationCenterDashboard(Gtk.Window):
                     cpu_pct = 14
                 self.last_cpu_idle = idle
                 self.last_cpu_total = total
-                self.g_cpu.set_val(f"{cpu_pct}%", "LOAD")
+                self.g_cpu.set_val(cpu_pct)
         except Exception:
             pass
 
@@ -772,9 +787,8 @@ class NotificationCenterDashboard(Gtk.Window):
                 for line in f:
                     parts = line.split()
                     mem[parts[0].rstrip(":")] = int(parts[1])
-                mem_used_gb = (mem["MemTotal"] - mem["MemAvailable"]) / 1048576.0
                 mem_pct = int((1.0 - (mem["MemAvailable"] / mem["MemTotal"])) * 100)
-                self.g_mem.set_val(f"{mem_used_gb:.1f}G", f"{mem_pct}%")
+                self.g_mem.set_val(mem_pct)
         except Exception:
             pass
 
@@ -782,7 +796,7 @@ class NotificationCenterDashboard(Gtk.Window):
         try:
             st = os.statvfs("/")
             disk_pct = int((1.0 - (st.f_bavail / st.f_blocks)) * 100)
-            self.g_disk.set_val(f"{disk_pct}%", "/home")
+            self.g_disk.set_val(disk_pct)
         except Exception:
             pass
 
@@ -797,7 +811,7 @@ class NotificationCenterDashboard(Gtk.Window):
                         break
             except Exception:
                 pass
-        self.g_temp.set_val(f"{temp_val}°C", "CORE")
+        self.g_temp.set_val(temp_val, f"{temp_val}°")
 
         # 5. Sliders (Volume & Brightness)
         try:
