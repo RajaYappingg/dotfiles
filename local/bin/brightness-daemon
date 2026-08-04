@@ -12,7 +12,6 @@ from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 import cairo
 
 BRIGHTNESS_FILE = "/tmp/.brightness_level"
-PID_FILE = "/tmp/brightness_daemon.pid"
 
 def get_saved_brightness():
     try:
@@ -42,12 +41,13 @@ class SoftwareDimmer(Gtk.Window):
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "software-brightness")
-        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.TOP)
-        GtkLayerShell.set_exclusive_zone(self, -1)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+
+        GtkLayerShell.set_exclusive_zone(self, -1)
 
         screen = self.get_screen()
         visual = screen.get_rgba_visual()
@@ -60,44 +60,53 @@ class SoftwareDimmer(Gtk.Window):
 
         self.brightness = get_saved_brightness()
 
-        self.connect("draw", self.on_draw)
+        self.da = Gtk.DrawingArea()
+        self.da.connect("draw", self.on_draw)
+        self.add(self.da)
+
         self.show_all()
 
         GLib.timeout_add(50, self.check_file_update)
 
     def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+
         cr.set_operator(cairo.OPERATOR_CLEAR)
         cr.paint()
-
         cr.set_operator(cairo.OPERATOR_OVER)
+
         # At 100% -> alpha 0.0 (completely clear, no dimming)
         # At 10%  -> alpha 0.76 (dimmed)
         alpha = max(0.0, min(0.85, (100.0 - self.brightness) / 100.0 * 0.85))
         cr.set_source_rgba(0.0, 0.0, 0.0, alpha)
-        cr.paint()
+        cr.rectangle(0, 0, w, h)
+        cr.fill()
         return False
 
     def check_file_update(self):
         val = get_saved_brightness()
         if val != self.brightness:
             self.brightness = val
-            self.queue_draw()
+            self.da.queue_draw()
             try_hardware_brightness(val)
         return True
 
 def main():
-    my_pid = os.getpid()
+    lock_file = "/tmp/.brightness_daemon.lock"
     try:
-        res = subprocess.run(["pgrep", "-f", "brightness-daemon"], capture_output=True, text=True)
-        for p_str in res.stdout.strip().split():
-            try:
-                p = int(p_str)
-                if p != my_pid:
-                    os.kill(p, 9)
-            except Exception:
-                pass
+        import fcntl
+        fp = open(lock_file, "w")
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except Exception:
-        pass
+        # If another instance is running, kill it and take over
+        try:
+            res = subprocess.run(["pgrep", "-f", "brightness-daemon"], capture_output=True, text=True)
+            for pid_str in res.stdout.strip().split():
+                if int(pid_str) != os.getpid():
+                    os.kill(int(pid_str), 9)
+        except Exception:
+            pass
 
     app = SoftwareDimmer()
     Gtk.main()
