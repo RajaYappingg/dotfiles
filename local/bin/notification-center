@@ -385,6 +385,56 @@ scrollbar slider {{
     border-radius: 9999px;
     background-color: rgba(255, 255, 255, 0.20);
 }}
+
+/* Catppuccin / Imperative-dots Stat Cards */
+.stat-card {{
+    background-color: rgba(30, 30, 46, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    padding: 12px 14px;
+    min-height: 64px;
+    transition: all 0.2s ease;
+}}
+
+.stat-card:hover {{
+    background-color: rgba(49, 50, 68, 0.85);
+    border-color: rgba(137, 180, 250, 0.40);
+}}
+
+.stat-card-icon {{
+    font-size: 18px;
+}}
+
+.stat-card-title {{
+    font-size: 11px;
+    font-weight: 700;
+    color: #7f849c;
+    letter-spacing: 1px;
+}}
+
+.stat-card-sub {{
+    font-size: 11px;
+    font-weight: 600;
+    color: #a6adc8;
+}}
+
+.stat-card-val {{
+    font-size: 22px;
+    font-weight: 800;
+    color: #cdd6f4;
+}}
+
+.stat-card-blue .stat-card-icon {{ color: #89b4fa; }}
+.stat-card-blue .stat-card-val {{ color: #89b4fa; }}
+
+.stat-card-mauve .stat-card-icon {{ color: #cba6f7; }}
+.stat-card-mauve .stat-card-val {{ color: #cba6f7; }}
+
+.stat-card-teal .stat-card-icon {{ color: #94e2d5; }}
+.stat-card-teal .stat-card-val {{ color: #94e2d5; }}
+
+.stat-card-peach .stat-card-icon {{ color: #fab387; }}
+.stat-card-peach .stat-card-val {{ color: #fab387; }}
 """
 
 def ease_out_cubic(t):
@@ -396,7 +446,46 @@ def ease_in_cubic(t):
     return t * t * t
 
 
-class ThickRadialGauge(Gtk.DrawingArea):
+class StatCard(Gtk.EventBox):
+    def __init__(self, title, icon, color_class):
+        super().__init__()
+        self.title = title
+        self.icon = icon
+        self.set_visible_window(True)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.get_style_context().add_class("stat-card")
+        box.get_style_context().add_class(color_class)
+
+        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_icon = Gtk.Label(label=icon, xalign=0)
+        lbl_icon.get_style_context().add_class("stat-card-icon")
+
+        lbl_title = Gtk.Label(label=title, xalign=1)
+        lbl_title.get_style_context().add_class("stat-card-title")
+
+        top_row.pack_start(lbl_icon, False, False, 0)
+        top_row.pack_end(lbl_title, False, False, 0)
+
+        bottom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.lbl_sub = Gtk.Label(label="", xalign=0)
+        self.lbl_sub.get_style_context().add_class("stat-card-sub")
+
+        self.lbl_val = Gtk.Label(label="0%", xalign=1)
+        self.lbl_val.get_style_context().add_class("stat-card-val")
+
+        bottom_row.pack_start(self.lbl_sub, False, False, 0)
+        bottom_row.pack_end(self.lbl_val, True, True, 0)
+
+        box.pack_start(top_row, False, False, 0)
+        box.pack_start(bottom_row, True, True, 0)
+
+        self.add(box)
+
+    def set_val(self, val_str, sub_str=""):
+        self.lbl_val.set_text(str(val_str))
+        if sub_str:
+            self.lbl_sub.set_text(str(sub_str))
     def __init__(self, title, icon, color_rgb):
         super().__init__()
         self.title = title
@@ -539,18 +628,17 @@ class NotificationCenterDashboard(Gtk.Window):
         right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         right_col.set_size_request(340, -1)
 
-        # A. 2x2 Thick Circular Gauges Grid with Dynamic Wallpaper Colors
+        # A. 2x2 Imperative-Dots Catppuccin Stat Cards Grid
         gauges_grid = Gtk.Grid()
-        gauges_grid.set_column_spacing(18)
-        gauges_grid.set_row_spacing(16)
+        gauges_grid.set_column_spacing(12)
+        gauges_grid.set_row_spacing(12)
         gauges_grid.set_column_homogeneous(True)
         gauges_grid.set_row_homogeneous(True)
 
-        # Dynamic Wallpaper Color Arcs
-        self.g_cpu = ThickRadialGauge("CPU LOAD", "󰍛", PRIMARY_RGB)
-        self.g_mem = ThickRadialGauge("MEMORY", "󰘚", SECONDARY_RGB)
-        self.g_disk = ThickRadialGauge("STORAGE", "󰋊", (min(1.0, PRIMARY_RGB[0]*1.2), max(0.3, PRIMARY_RGB[1]*0.8), min(1.0, PRIMARY_RGB[2]*1.1)))
-        self.g_temp = ThickRadialGauge("SYSTEM TEMP", "󰔏", (min(1.0, SECONDARY_RGB[0]*1.2), min(1.0, SECONDARY_RGB[1]*0.9), max(0.2, SECONDARY_RGB[2]*0.7)))
+        self.g_cpu = StatCard("CPU", "󰍛", "stat-card-blue")
+        self.g_mem = StatCard("RAM", "󰘚", "stat-card-mauve")
+        self.g_disk = StatCard("DISK", "󰋊", "stat-card-teal")
+        self.g_temp = StatCard("TEMP", "󰔏", "stat-card-peach")
 
         gauges_grid.attach(self.g_cpu, 0, 0, 1, 1)
         gauges_grid.attach(self.g_mem, 1, 0, 1, 1)
@@ -727,7 +815,7 @@ class NotificationCenterDashboard(Gtk.Window):
                     cpu_pct = 14
                 self.last_cpu_idle = idle
                 self.last_cpu_total = total
-                self.g_cpu.set_val(cpu_pct)
+                self.g_cpu.set_val(f"{cpu_pct}%", "LOAD")
         except Exception:
             pass
 
@@ -738,8 +826,9 @@ class NotificationCenterDashboard(Gtk.Window):
                 for line in f:
                     parts = line.split()
                     mem[parts[0].rstrip(":")] = int(parts[1])
+                mem_used_gb = (mem["MemTotal"] - mem["MemAvailable"]) / 1048576.0
                 mem_pct = int((1.0 - (mem["MemAvailable"] / mem["MemTotal"])) * 100)
-                self.g_mem.set_val(mem_pct)
+                self.g_mem.set_val(f"{mem_used_gb:.1f}G", f"{mem_pct}%")
         except Exception:
             pass
 
@@ -747,12 +836,12 @@ class NotificationCenterDashboard(Gtk.Window):
         try:
             st = os.statvfs("/")
             disk_pct = int((1.0 - (st.f_bavail / st.f_blocks)) * 100)
-            self.g_disk.set_val(disk_pct)
+            self.g_disk.set_val(f"{disk_pct}%", "/home")
         except Exception:
             pass
 
         # 4. Temperature
-        temp_val = 50
+        temp_val = 43
         for p in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
             try:
                 with open(p) as f:
@@ -762,7 +851,7 @@ class NotificationCenterDashboard(Gtk.Window):
                         break
             except Exception:
                 pass
-        self.g_temp.set_val(temp_val, f"{temp_val}°")
+        self.g_temp.set_val(f"{temp_val}°C", "CORE")
 
         # 5. Sliders (Volume & Brightness)
         try:
