@@ -99,14 +99,27 @@ window.notif-window {{
     letter-spacing: 0.5px;
 }}
 
-.clock-pill {{
+.clock-pill-container {{
     background-color: {hex_to_rgba_str(BG_PILL_HEX, 0.60)};
-    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.30)};
-    border-radius: 12px;
-    padding: 5px 14px;
-    font-size: 14px;
+    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.35)};
+    border-radius: 14px;
+    padding: 6px 18px;
+}}
+
+.clock-main-text {{
+    font-size: 20px;
     font-weight: 800;
+    color: #ffffff;
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+    letter-spacing: 0.5px;
+}}
+
+.clock-sec-text {{
+    font-size: 13px;
+    font-weight: 700;
     color: {PRIMARY_HEX};
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+    margin-left: 2px;
 }}
 
 .btn-close {{
@@ -548,18 +561,18 @@ class NotificationCenterDashboard(Gtk.Window):
         title_box.pack_start(lbl_icon, False, False, 0)
         title_box.pack_start(lbl_title, False, False, 0)
 
-        # Clock Center Pill
-        self.lbl_clock_hr = Gtk.Label(label="01 HR")
-        self.lbl_clock_hr.get_style_context().add_class("clock-pill")
-        lbl_colon = Gtk.Label(label=":")
-        lbl_colon.get_style_context().add_class("header-title")
-        self.lbl_clock_min = Gtk.Label(label="02 MIN")
-        self.lbl_clock_min.get_style_context().add_class("clock-pill")
+        # Real-time Clock Pill Container (HH:MM :SS like calendar)
+        self.lbl_clock_hm = Gtk.Label(label="12:00")
+        self.lbl_clock_hm.get_style_context().add_class("clock-main-text")
 
-        clock_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        clock_box.pack_start(self.lbl_clock_hr, False, False, 0)
-        clock_box.pack_start(lbl_colon, False, False, 0)
-        clock_box.pack_start(self.lbl_clock_min, False, False, 0)
+        self.lbl_clock_sec = Gtk.Label(label=":00")
+        self.lbl_clock_sec.get_style_context().add_class("clock-sec-text")
+        self.lbl_clock_sec.set_valign(Gtk.Align.CENTER)
+
+        clock_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        clock_box.get_style_context().add_class("clock-pill-container")
+        clock_box.pack_start(self.lbl_clock_hm, False, False, 0)
+        clock_box.pack_start(self.lbl_clock_sec, False, False, 0)
         clock_box.set_halign(Gtk.Align.CENTER)
 
         btn_exit = Gtk.Button(label="󰍃")
@@ -737,8 +750,8 @@ class NotificationCenterDashboard(Gtk.Window):
 
     def update_clock(self):
         t = time.localtime()
-        self.lbl_clock_hr.set_text(time.strftime("%H HR", t))
-        self.lbl_clock_min.set_text(time.strftime("%M MIN", t))
+        self.lbl_clock_hm.set_text(time.strftime("%H:%M", t))
+        self.lbl_clock_sec.set_text(time.strftime(":%S", t))
 
     def update_power_mode_ui(self):
         current_mode = self.get_cmd_out("powerprofilesctl get") or "balanced"
