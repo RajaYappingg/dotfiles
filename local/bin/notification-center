@@ -175,30 +175,43 @@ window.notif-window {{
     margin-top: 3px;
 }}
 
-/* Sliders Section */
+/* Sliders Section (Brightness & Volume) */
 .slider-icon {{
     font-size: 18px;
-    color: rgba(255, 255, 255, 0.85);
+    color: {PRIMARY_HEX};
     margin-right: 10px;
 }}
 
-scale contents trough {{
-    background-color: rgba(0, 0, 0, 0.45);
-    border-radius: 9999px;
-    min-height: 18px;
+scale {{
+    padding: 4px 0px;
 }}
 
-scale contents highlight {{
+scale trough {{
+    background-color: rgba(255, 255, 255, 0.12);
+    border-radius: 9999px;
+    min-height: 14px;
+}}
+
+scale highlight {{
     background-color: {PRIMARY_HEX};
     border-radius: 9999px;
-    min-height: 18px;
+    min-height: 14px;
 }}
 
 scale slider {{
-    min-width: 0px;
-    min-height: 0px;
-    opacity: 0;
-    margin: 0px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+    margin: -2px 0px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    transition: transform 0.15s ease;
+}}
+
+scale slider:hover {{
+    transform: scale(1.15);
+    background-color: #ffffff;
+    box-shadow: 0 0 12px {hex_to_rgba_str(PRIMARY_HEX, 0.80)};
 }}
 
 /* Power Buttons Grid - Sleek, Compact, Aligned */
@@ -702,31 +715,41 @@ class NotificationCenterDashboard(Gtk.Window):
 
         # 5. Sliders (Volume & Brightness)
         try:
-            vol_out = self.get_cmd_out("wpctl get-volume @DEFAULT_AUDIO_SINK@")
-            vol_val = float(vol_out.split()[1]) * 100
-            self.scale_vol.handler_block(self.scale_vol_sig)
-            self.scale_vol.set_value(vol_val)
-            self.scale_vol.handler_unblock(self.scale_vol_sig)
+            if not getattr(self, 'is_user_dragging_vol', False):
+                vol_out = self.get_cmd_out("wpctl get-volume @DEFAULT_AUDIO_SINK@")
+                vol_val = float(vol_out.split()[1]) * 100
+                self.scale_vol.handler_block(self.scale_vol_sig)
+                self.scale_vol.set_value(vol_val)
+                self.scale_vol.handler_unblock(self.scale_vol_sig)
         except Exception:
             pass
 
         try:
-            b_max = float(self.get_cmd_out("brightnessctl m") or "255")
-            b_cur = float(self.get_cmd_out("brightnessctl g") or "128")
-            b_val = (b_cur / b_max) * 100
-            self.scale_b.handler_block(self.scale_b_sig)
-            self.scale_b.set_value(b_val)
-            self.scale_b.handler_unblock(self.scale_b_sig)
+            if not getattr(self, 'is_user_dragging_b', False):
+                b_max = float(self.get_cmd_out("brightnessctl m") or "255")
+                b_cur = float(self.get_cmd_out("brightnessctl g") or "128")
+                b_val = (b_cur / b_max) * 100
+                self.scale_b.handler_block(self.scale_b_sig)
+                self.scale_b.set_value(b_val)
+                self.scale_b.handler_unblock(self.scale_b_sig)
         except Exception:
             pass
 
     def on_vol_change(self, scale):
+        if getattr(self, 'is_user_dragging_vol', False):
+            return
+        self.is_user_dragging_vol = True
         val = int(scale.get_value())
         self.run_cmd(f"wpctl set-volume -l 1.4 @DEFAULT_AUDIO_SINK@ {val}%")
+        GLib.timeout_add(40, lambda: setattr(self, 'is_user_dragging_vol', False))
 
     def on_b_change(self, scale):
-        val = int(scale.get_value())
-        self.run_cmd(f"brightnessctl set {val}%")
+        if getattr(self, 'is_user_dragging_b', False):
+            return
+        self.is_user_dragging_b = True
+        val = max(1, int(scale.get_value()))
+        self.run_cmd(f"brightnessctl -q set {val}%")
+        GLib.timeout_add(40, lambda: setattr(self, 'is_user_dragging_b', False))
 
     def load_notifications(self):
         for child in self.cards_box.get_children():
