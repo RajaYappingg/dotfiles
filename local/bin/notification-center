@@ -145,14 +145,12 @@ window.notif-window {{
     color: #ef4444;
 }}
 
-/* Notification Card with Dynamic Wallpaper Left Vertical Accent Line */
+/* Imperative-dots Notification Card Styles */
 .notif-card {{
     background-color: {hex_to_rgba_str(BG_PILL_HEX, 0.45)};
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-left: 4px solid {PRIMARY_HEX};
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 12px 14px;
     margin-bottom: 8px;
     transition: all 0.2s ease;
@@ -160,19 +158,70 @@ window.notif-window {{
 
 .notif-card:hover {{
     background-color: {hex_to_rgba_str(BG_PILL_HEX, 0.70)};
-    border-left-color: {SECONDARY_HEX};
+    border-color: {hex_to_rgba_str(PRIMARY_HEX, 0.40)};
+}}
+
+.notif-app-badge {{
+    font-size: 11px;
+    font-weight: 700;
+    color: #7f849c;
+    letter-spacing: 0.8px;
+}}
+
+.notif-time-str {{
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c7086;
 }}
 
 .card-summary {{
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 800;
-    color: #ffffff;
+    color: #cdd6f4;
+    margin-top: 2px;
 }}
 
 .card-body {{
-    font-size: 11px;
-    color: rgba(226, 232, 240, 0.85);
-    margin-top: 3px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #a6adc8;
+    margin-top: 4px;
+}}
+
+/* Imperative Dots Inline Action Buttons */
+button.notif-action-primary {{
+    background-image: none;
+    background-color: {PRIMARY_HEX};
+    border: 1px solid {PRIMARY_HEX};
+    border-radius: 8px;
+    color: #11111b;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 6px 12px;
+    transition: all 0.15s ease;
+}}
+
+button.notif-action-primary:hover {{
+    background-color: {SECONDARY_HEX};
+    border-color: {SECONDARY_HEX};
+    color: #ffffff;
+}}
+
+button.notif-action-secondary {{
+    background-image: none;
+    background-color: rgba(69, 71, 90, 0.50);
+    border: 1px solid rgba(88, 91, 112, 0.70);
+    border-radius: 8px;
+    color: #cdd6f4;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    transition: all 0.15s ease;
+}}
+
+button.notif-action-secondary:hover {{
+    background-color: rgba(88, 91, 112, 0.80);
+    color: #ffffff;
 }}
 
 /* Sliders Section (Brightness & Volume) */
@@ -833,30 +882,87 @@ class NotificationCenterDashboard(Gtk.Window):
     def create_card_widget(self, item):
         summary = item.get("summary", {}).get("data", "")
         body = item.get("body", {}).get("data", "")
+        appname = item.get("appname", {}).get("data", "System")
 
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        # Calculate timestamp ago string
+        timestamp = item.get("timestamp", {}).get("data", 0)
+        time_str = ""
+        if timestamp > 0:
+            diff = int(time.time() - (timestamp / 1000000.0 if timestamp > 1e12 else timestamp))
+            if diff < 60:
+                time_str = "Just now"
+            elif diff < 3600:
+                time_str = f"{diff // 60}m ago"
+            else:
+                time_str = f"{diff // 3600}h ago"
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.get_style_context().add_class("notif-card")
 
-        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        lbl_sum = Gtk.Label(label=summary, xalign=0)
-        lbl_sum.get_style_context().add_class("card-summary")
-        lbl_sum.set_line_wrap(True)
+        # Top Bar: App Badge + Timestamp + Close Button
+        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        lbl_app = Gtk.Label(label=appname.upper(), xalign=0)
+        lbl_app.get_style_context().add_class("notif-app-badge")
+        top_bar.pack_start(lbl_app, False, False, 0)
+
+        if time_str:
+            lbl_time = Gtk.Label(label=time_str, xalign=1)
+            lbl_time.get_style_context().add_class("notif-time-str")
+            top_bar.pack_start(lbl_time, True, True, 0)
+        else:
+            spacer = Gtk.Label(label="")
+            top_bar.pack_start(spacer, True, True, 0)
 
         btn_close_card = Gtk.Button(label="󰅖")
         btn_close_card.get_style_context().add_class("icon-mini-btn")
         btn_close_card.connect("clicked", lambda w: self.on_clear_all())
+        top_bar.pack_start(btn_close_card, False, False, 0)
 
-        top_row.pack_start(lbl_sum, True, True, 0)
-        top_row.pack_start(btn_close_card, False, False, 0)
-        card.pack_start(top_row, False, False, 0)
+        card.pack_start(top_bar, False, False, 0)
 
+        # Summary Line (Bold 14px)
+        if summary:
+            lbl_sum = Gtk.Label(label=summary, xalign=0)
+            lbl_sum.get_style_context().add_class("card-summary")
+            lbl_sum.set_line_wrap(True)
+            card.pack_start(lbl_sum, False, False, 0)
+
+        # Body Line (Medium 12px)
         if body:
             lbl_body = Gtk.Label(label=body, xalign=0)
             lbl_body.get_style_context().add_class("card-body")
             lbl_body.set_line_wrap(True)
             card.pack_start(lbl_body, False, False, 0)
 
+        # Inline Action Buttons
+        actions = item.get("actions", {}).get("data", [])
+        if actions:
+            actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            actions_box.set_margin_top(6)
+            for idx, act in enumerate(actions):
+                act_key = act.get("key", "default")
+                act_label = act.get("label", "Action")
+
+                btn_act = Gtk.Button(label=act_label)
+                if idx == 0:
+                    btn_act.get_style_context().add_class("notif-action-primary")
+                else:
+                    btn_act.get_style_context().add_class("notif-action-secondary")
+
+                btn_act.connect("clicked", lambda w, k=act_key: self.on_action_clicked(k))
+                actions_box.pack_start(btn_act, True, True, 0)
+
+            card.pack_start(actions_box, False, False, 0)
+
         return card
+
+    def on_action_clicked(self, key):
+        try:
+            subprocess.run(["dunstctl", "action", str(key)])
+        except Exception:
+            pass
+        self.load_notifications()
 
     def on_clear_all(self):
         try:
