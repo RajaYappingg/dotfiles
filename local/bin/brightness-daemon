@@ -86,20 +86,18 @@ class SoftwareDimmer(Gtk.Window):
         return True
 
 def main():
+    my_pid = os.getpid()
     try:
-        if os.path.exists(PID_FILE):
-            with open(PID_FILE, "r") as f:
-                old_pid = int(f.read().strip())
-            if old_pid != os.getpid():
-                try:
-                    os.kill(old_pid, 9)
-                except Exception:
-                    pass
+        res = subprocess.run(["pgrep", "-f", "brightness-daemon"], capture_output=True, text=True)
+        for p_str in res.stdout.strip().split():
+            try:
+                p = int(p_str)
+                if p != my_pid:
+                    os.kill(p, 9)
+            except Exception:
+                pass
     except Exception:
         pass
-
-    with open(PID_FILE, "w") as f:
-        f.write(str(os.getpid()))
 
     app = SoftwareDimmer()
     Gtk.main()
