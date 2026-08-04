@@ -486,60 +486,6 @@ class StatCard(Gtk.EventBox):
         self.lbl_val.set_text(str(val_str))
         if sub_str:
             self.lbl_sub.set_text(str(sub_str))
-    def __init__(self, title, icon, color_rgb):
-        super().__init__()
-        self.title = title
-        self.icon = icon
-        self.color_rgb = color_rgb
-        self.value_str = "0%"
-        self.pct = 0
-        self.set_size_request(130, 130)
-        self.connect("draw", self.on_draw)
-
-    def set_val(self, pct, value_str=None):
-        self.pct = max(0, min(100, pct))
-        self.value_str = value_str if value_str else f"{int(self.pct)}%"
-        self.queue_draw()
-
-    def on_draw(self, widget, cr):
-        w = self.get_allocated_width()
-        h = self.get_allocated_height()
-        xc, yc = w / 2, (h / 2) - 10
-        r = min(w, h) / 2 - 16
-
-        # 1. Dark Recessed Track (Thick: 14px)
-        cr.set_line_width(14)
-        cr.set_line_cap(cairo.LINE_CAP_BUTT)
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.45)
-        cr.arc(xc, yc, r, 0, 2 * math.pi)
-        cr.stroke()
-
-        # 2. Thick Colored Progress Arc
-        if self.pct > 0:
-            start = -math.pi / 2
-            end = start + (self.pct / 100.0) * (2 * math.pi)
-            cr.set_line_width(14)
-            cr.set_line_cap(cairo.LINE_CAP_BUTT)
-            cr.set_source_rgba(*self.color_rgb)
-            cr.arc(xc, yc, r, start, end)
-            cr.stroke()
-
-        # 3. Center Text: Icon + Big Percentage
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
-        cr.select_font_face("JetBrainsMono Nerd Font", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(15)
-
-        txt = f"{self.icon} {self.value_str}"
-        ext = cr.text_extents(txt)
-        cr.move_to(xc - ext.width / 2, yc + 5)
-        cr.show_text(txt)
-
-        # 4. Subtitle below ring
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.55)
-        cr.set_font_size(10)
-        ext_t = cr.text_extents(self.title)
-        cr.move_to(xc - ext_t.width / 2, h - 2)
-        cr.show_text(self.title)
 
 
 class NotificationCenterDashboard(Gtk.Window):
