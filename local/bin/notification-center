@@ -714,7 +714,7 @@ class NotificationCenterDashboard(Gtk.Window):
 
         # 5. Sliders (Volume & Brightness)
         try:
-            if not getattr(self, 'is_user_dragging_vol', False):
+            if not getattr(self, 'is_user_interacting_vol', False):
                 vol_out = self.get_cmd_out("wpctl get-volume @DEFAULT_AUDIO_SINK@")
                 vol_val = float(vol_out.split()[1]) * 100
                 self.scale_vol.handler_block(self.scale_vol_sig)
@@ -724,7 +724,7 @@ class NotificationCenterDashboard(Gtk.Window):
             pass
 
         try:
-            if not getattr(self, 'is_user_dragging_b', False):
+            if not getattr(self, 'is_user_interacting_b', False):
                 b_max = float(self.get_cmd_out("brightnessctl m") or "255")
                 b_cur = float(self.get_cmd_out("brightnessctl g") or "128")
                 b_val = (b_cur / b_max) * 100
@@ -734,21 +734,25 @@ class NotificationCenterDashboard(Gtk.Window):
         except Exception:
             pass
 
+    def _reset_vol_interacting(self):
+        self.is_user_interacting_vol = False
+        return False
+
+    def _reset_b_interacting(self):
+        self.is_user_interacting_b = False
+        return False
+
     def on_vol_change(self, scale):
-        if getattr(self, 'is_user_dragging_vol', False):
-            return
-        self.is_user_dragging_vol = True
+        self.is_user_interacting_vol = True
         val = int(scale.get_value())
         self.run_cmd(f"wpctl set-volume -l 1.4 @DEFAULT_AUDIO_SINK@ {val}%")
-        GLib.timeout_add(40, lambda: setattr(self, 'is_user_dragging_vol', False))
+        GLib.timeout_add(1500, self._reset_vol_interacting)
 
     def on_b_change(self, scale):
-        if getattr(self, 'is_user_dragging_b', False):
-            return
-        self.is_user_dragging_b = True
+        self.is_user_interacting_b = True
         val = max(1, int(scale.get_value()))
         self.run_cmd(f"brightnessctl -q set {val}%")
-        GLib.timeout_add(40, lambda: setattr(self, 'is_user_dragging_b', False))
+        GLib.timeout_add(1500, self._reset_b_interacting)
 
     def load_notifications(self):
         for child in self.cards_box.get_children():
