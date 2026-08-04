@@ -7,7 +7,8 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-from gi.repository import Gtk, Gdk, GLib
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 import cairo
 
 BRIGHTNESS_FILE = "/tmp/.brightness_level"
@@ -16,7 +17,8 @@ def get_saved_brightness():
     try:
         if os.path.exists(BRIGHTNESS_FILE):
             with open(BRIGHTNESS_FILE, "r") as f:
-                return int(f.read().strip())
+                val = int(float(f.read().strip()))
+                return max(10, min(100, val))
     except Exception:
         pass
     return 100
@@ -35,62 +37,70 @@ def try_hardware_brightness(percent):
 
 class SoftwareDimmer(Gtk.Window):
     def __init__(self):
-        super().__init__(type=Gtk.WindowType.POPUP)
-        self.set_app_paintable(True)
-        self.set_title("BrightnessOverlay")
-        self.set_keep_above(True)
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
 
-        screen = self.get_screen()
-        visual = screen.get_rgba_visual()
-        if visual:
-            self.set_visual(visual)
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "software-brightness")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+
+        # 100% Click-through (pass through all mouse & keyboard inputs)
+        self.input_shape_combine_region(cairo.Region())
 
         self.brightness = get_saved_brightness()
 
-        self.connect("draw", self.on_draw)
-        self.fullscreen()
-        self.realize()
+        self.da = Gtk.DrawingArea()
+        self.da.connect("draw", self.on_draw)
+        self.add(self.da)
 
-        # Pass through all user inputs (mouse, keyboard, touches) to underlying windows
-        gdk_win = self.get_window()
-        if gdk_win:
-            gdk_win.set_pass_through(True)
+        self.show_all()
 
-        GLib.timeout_add(100, self.check_file_update)
+        GLib.timeout_add(50, self.check_file_update)
 
     def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+
         cr.set_operator(cairo.OPERATOR_CLEAR)
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
 
-        # Smooth dark dimming overlay when brightness < 100%
-        # At 100% -> alpha 0.0 (completely clear)
-        # At 10%  -> alpha ~0.80 (dimmed dark)
-        alpha = max(0.0, min(0.85, (100.0 - self.brightness) / 100.0 * 0.88))
+        # At 100% -> alpha 0.0 (completely clear, no dimming)
+        # At 10%  -> alpha 0.76 (dimmed)
+        alpha = max(0.0, min(0.85, (100.0 - self.brightness) / 100.0 * 0.85))
         cr.set_source_rgba(0.0, 0.0, 0.0, alpha)
-        cr.paint()
+        cr.rectangle(0, 0, w, h)
+        cr.fill()
         return False
 
     def check_file_update(self):
         val = get_saved_brightness()
         if val != self.brightness:
             self.brightness = val
-            self.queue_draw()
+            self.da.queue_draw()
             try_hardware_brightness(val)
         return True
 
 def main():
-    # Ensure single instance
     lock_file = "/tmp/.brightness_daemon.lock"
     try:
         import fcntl
         fp = open(lock_file, "w")
         fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except Exception:
-        sys.exit(0)
+        # If another instance is running, kill it and take over
+        try:
+            res = subprocess.run(["pgrep", "-f", "brightness-daemon"], capture_output=True, text=True)
+            for pid_str in res.stdout.strip().split():
+                if int(pid_str) != os.getpid():
+                    os.kill(int(pid_str), 9)
+        except Exception:
+            pass
 
     app = SoftwareDimmer()
-    app.show_all()
     Gtk.main()
 
 if __name__ == "__main__":
