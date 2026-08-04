@@ -467,7 +467,7 @@ class ThickRadialGauge(Gtk.DrawingArea):
         self.color_rgb = color_rgb
         self.value_str = "0%"
         self.pct = 0
-        self.set_size_request(130, 130)
+        self.set_size_request(140, 140)
         self.connect("draw", self.on_draw)
 
     def set_val(self, pct, value_str=None):
@@ -476,23 +476,25 @@ class ThickRadialGauge(Gtk.DrawingArea):
         self.queue_draw()
 
     def on_draw(self, widget, cr):
-        w = self.get_allocated_width()
-        h = self.get_allocated_height()
-        xc, yc = w / 2, (h / 2) - 10
-        r = 44
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        xc = w / 2.0
+        yc = 55.0
+        r = 42.0
+        stroke_w = 12.0
 
-        # 1. Dark Recessed Track (Thick: 14px)
-        cr.set_line_width(14)
+        # 1. Dark Recessed Track
+        cr.set_line_width(stroke_w)
         cr.set_line_cap(cairo.LINE_CAP_BUTT)
         cr.set_source_rgba(0.0, 0.0, 0.0, 0.45)
         cr.arc(xc, yc, r, 0, 2 * math.pi)
         cr.stroke()
 
-        # 2. Thick Colored Progress Arc
+        # 2. Colored Progress Arc
         if self.pct > 0:
             start = -math.pi / 2
             end = start + (self.pct / 100.0) * (2 * math.pi)
-            cr.set_line_width(14)
+            cr.set_line_width(stroke_w)
             cr.set_line_cap(cairo.LINE_CAP_BUTT)
             cr.set_source_rgba(*self.color_rgb)
             cr.arc(xc, yc, r, start, end)
@@ -501,18 +503,18 @@ class ThickRadialGauge(Gtk.DrawingArea):
         # 3. Center Text: Icon + Big Percentage
         cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
         cr.select_font_face("JetBrainsMono Nerd Font", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(15)
+        cr.set_font_size(14)
 
         txt = f"{self.icon} {self.value_str}"
         ext = cr.text_extents(txt)
-        cr.move_to(xc - ext.width / 2, yc + 5)
+        cr.move_to(xc - ext.width / 2.0, yc + 5.0)
         cr.show_text(txt)
 
         # 4. Subtitle below ring
         cr.set_source_rgba(1.0, 1.0, 1.0, 0.55)
         cr.set_font_size(10)
         ext_t = cr.text_extents(self.title)
-        cr.move_to(xc - ext_t.width / 2, h - 2)
+        cr.move_to(xc - ext_t.width / 2.0, h - 4.0)
         cr.show_text(self.title)
 
 
