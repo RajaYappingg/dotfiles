@@ -549,7 +549,7 @@ class NotificationCenterDashboard(Gtk.Window):
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "notification-center")
-        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.TOP)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         if hasattr(GtkLayerShell, "set_keyboard_mode"):
             GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
         else:
