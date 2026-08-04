@@ -12,6 +12,7 @@ from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 import cairo
 
 BRIGHTNESS_FILE = "/tmp/.brightness_level"
+PID_FILE = "/tmp/brightness_daemon.pid"
 
 def get_saved_brightness():
     try:
@@ -85,23 +86,28 @@ class SoftwareDimmer(Gtk.Window):
         return True
 
 def main():
-    lock_file = "/tmp/.brightness_daemon.lock"
+    print("Starting brightness-daemon...")
     try:
-        import fcntl
-        fp = open(lock_file, "w")
-        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except Exception:
-        # If another instance is running, kill it and take over
-        try:
-            res = subprocess.run(["pgrep", "-f", "brightness-daemon"], capture_output=True, text=True)
-            for pid_str in res.stdout.strip().split():
-                if int(pid_str) != os.getpid():
-                    os.kill(int(pid_str), 9)
-        except Exception:
-            pass
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, "r") as f:
+                old_pid = int(f.read().strip())
+            if old_pid != os.getpid():
+                try:
+                    os.kill(old_pid, 9)
+                except Exception:
+                    pass
+    except Exception as e:
+        print("PID check error:", e)
 
-    app = SoftwareDimmer()
-    Gtk.main()
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+    try:
+        app = SoftwareDimmer()
+        print("SoftwareDimmer instantiated, entering Gtk.main()...")
+        Gtk.main()
+    except Exception as e:
+        print("Gtk.main error:", e)
 
 if __name__ == "__main__":
     main()
