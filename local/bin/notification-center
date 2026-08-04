@@ -205,13 +205,12 @@ scale slider {{
     min-height: 18px;
     margin: -2px 0px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-    transition: transform 0.15s ease;
+    transition: all 0.15s ease;
 }}
 
 scale slider:hover {{
-    transform: scale(1.15);
     background-color: #ffffff;
-    box-shadow: 0 0 12px {hex_to_rgba_str(PRIMARY_HEX, 0.80)};
+    box-shadow: 0 0 12px {hex_to_rgba_str(PRIMARY_HEX, 0.90)};
 }}
 
 /* Power Buttons Grid - Sleek, Compact, Aligned */
