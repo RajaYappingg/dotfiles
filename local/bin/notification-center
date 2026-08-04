@@ -759,8 +759,14 @@ class NotificationCenterDashboard(Gtk.Window):
     def on_b_change(self, scale):
         self.is_user_interacting_b = True
         val = max(10, int(scale.get_value()))
-        self.run_cmd(f"/home/zaki/.local/bin/change-brightness {val}")
-        GLib.timeout_add(1500, self._reset_b_interacting)
+        now = time.time()
+        if not hasattr(self, '_last_b_exec') or (now - self._last_b_exec > 0.08):
+            self._last_b_exec = now
+            self.run_cmd(f"/home/zaki/.local/bin/change-brightness {val}")
+
+        if hasattr(self, '_b_timer') and self._b_timer:
+            GLib.source_remove(self._b_timer)
+        self._b_timer = GLib.timeout_add(1500, self._reset_b_interacting)
 
     def load_notifications(self):
         for child in self.cards_box.get_children():

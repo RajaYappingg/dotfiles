@@ -65,7 +65,8 @@ def set_brightness(val):
         if sig_dirs:
             env['HYPRLAND_INSTANCE_SIGNATURE'] = os.path.basename(os.path.dirname(sig_dirs[0]))
 
-        subprocess.run(['pkill', '-f', 'hyprsunset'], capture_output=True)
+        subprocess.run(['pkill', '-9', '-f', 'hyprsunset'], capture_output=True)
+        time.sleep(0.04)
 
         if val < 100:
             subprocess.Popen(['hyprsunset', '--gamma', str(val)], env=env)
