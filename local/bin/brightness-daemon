@@ -49,45 +49,43 @@ class SoftwareDimmer(Gtk.Window):
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
 
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+        self.set_app_paintable(True)
+
         # 100% Click-through (pass through all mouse & keyboard inputs)
         self.input_shape_combine_region(cairo.Region())
 
         self.brightness = get_saved_brightness()
 
-        self.da = Gtk.DrawingArea()
-        self.da.connect("draw", self.on_draw)
-        self.add(self.da)
-
+        self.connect("draw", self.on_draw)
         self.show_all()
 
         GLib.timeout_add(50, self.check_file_update)
 
     def on_draw(self, widget, cr):
-        w = widget.get_allocated_width()
-        h = widget.get_allocated_height()
-
         cr.set_operator(cairo.OPERATOR_CLEAR)
         cr.paint()
-        cr.set_operator(cairo.OPERATOR_OVER)
 
+        cr.set_operator(cairo.OPERATOR_OVER)
         # At 100% -> alpha 0.0 (completely clear, no dimming)
         # At 10%  -> alpha 0.76 (dimmed)
         alpha = max(0.0, min(0.85, (100.0 - self.brightness) / 100.0 * 0.85))
         cr.set_source_rgba(0.0, 0.0, 0.0, alpha)
-        cr.rectangle(0, 0, w, h)
-        cr.fill()
+        cr.paint()
         return False
 
     def check_file_update(self):
         val = get_saved_brightness()
         if val != self.brightness:
             self.brightness = val
-            self.da.queue_draw()
+            self.queue_draw()
             try_hardware_brightness(val)
         return True
 
 def main():
-    print("Starting brightness-daemon...")
     try:
         if os.path.exists(PID_FILE):
             with open(PID_FILE, "r") as f:
@@ -97,18 +95,14 @@ def main():
                     os.kill(old_pid, 9)
                 except Exception:
                     pass
-    except Exception as e:
-        print("PID check error:", e)
+    except Exception:
+        pass
 
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
 
-    try:
-        app = SoftwareDimmer()
-        print("SoftwareDimmer instantiated, entering Gtk.main()...")
-        Gtk.main()
-    except Exception as e:
-        print("Gtk.main error:", e)
+    app = SoftwareDimmer()
+    Gtk.main()
 
 if __name__ == "__main__":
     main()
