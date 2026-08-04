@@ -37,7 +37,7 @@ def set_brightness(val):
 
     # 1. Hardware backlight via brightnessctl
     try:
-        subprocess.Popen(['brightnessctl', 'set', f'{val}%'])
+        subprocess.Popen(['brightnessctl', '-q', 'set', f'{val}%'])
     except Exception:
         pass
 
@@ -50,32 +50,6 @@ def set_brightness(val):
                 max_b = int(f.read().strip())
             target = max(1, int((val / 100.0) * max_b))
             subprocess.Popen(['busctl', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1/session/auto', 'org.freedesktop.login1.Session', 'SetBrightness', 'ssu', 'backlight', dev_name, str(target)])
-    except Exception:
-        pass
-
-    # 3. Native Hyprland CTM screen brightness via hyprsunset
-    try:
-        env = os.environ.copy()
-        env['XDG_RUNTIME_DIR'] = f'/run/user/{os.getuid()}'
-        w_disp = subprocess.run('ls /run/user/$UID/wayland-* 2>/dev/null | head -n 1', shell=True, capture_output=True, text=True).stdout.strip()
-        if w_disp:
-            env['WAYLAND_DISPLAY'] = os.path.basename(w_disp)
-
-        sig_dirs = glob.glob(f'/run/user/{os.getuid()}/hypr/*/.socket.sock')
-        if sig_dirs:
-            env['HYPRLAND_INSTANCE_SIGNATURE'] = os.path.basename(os.path.dirname(sig_dirs[0]))
-
-        # Kill exact hyprsunset process name only
-        subprocess.run(['pkill', '-9', '-x', 'hyprsunset'], capture_output=True)
-        for _ in range(20):
-            if subprocess.run(['pgrep', '-x', 'hyprsunset'], capture_output=True).returncode != 0:
-                break
-            time.sleep(0.01)
-
-        if val < 100:
-            subprocess.Popen(['hyprsunset', '-g', str(val)], env=env)
-        else:
-            subprocess.Popen(['hyprsunset', '-i'], env=env)
     except Exception:
         pass
 
