@@ -479,7 +479,7 @@ class ThickRadialGauge(Gtk.DrawingArea):
         w = self.get_allocated_width()
         h = self.get_allocated_height()
         xc, yc = w / 2, (h / 2) - 10
-        r = min(w, h) / 2 - 16
+        r = 44
 
         # 1. Dark Recessed Track (Thick: 14px)
         cr.set_line_width(14)
@@ -561,26 +561,11 @@ class NotificationCenterDashboard(Gtk.Window):
         title_box.pack_start(lbl_icon, False, False, 0)
         title_box.pack_start(lbl_title, False, False, 0)
 
-        # Real-time Clock Pill Container (HH:MM :SS like calendar)
-        self.lbl_clock_hm = Gtk.Label(label="12:00")
-        self.lbl_clock_hm.get_style_context().add_class("clock-main-text")
-
-        self.lbl_clock_sec = Gtk.Label(label=":00")
-        self.lbl_clock_sec.get_style_context().add_class("clock-sec-text")
-        self.lbl_clock_sec.set_valign(Gtk.Align.CENTER)
-
-        clock_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        clock_box.get_style_context().add_class("clock-pill-container")
-        clock_box.pack_start(self.lbl_clock_hm, False, False, 0)
-        clock_box.pack_start(self.lbl_clock_sec, False, False, 0)
-        clock_box.set_halign(Gtk.Align.CENTER)
-
         btn_exit = Gtk.Button(label="󰍃")
         btn_exit.get_style_context().add_class("btn-close")
         btn_exit.connect("clicked", lambda w: self.close_drawer())
 
         header.pack_start(title_box, True, True, 0)
-        header.pack_start(clock_box, True, True, 0)
         header.pack_start(btn_exit, False, False, 0)
 
         # 2. Main Content Split: Left Notifications Column + Right Dashboard Column
@@ -726,7 +711,6 @@ class NotificationCenterDashboard(Gtk.Window):
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, self.start_margin)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 16)
 
-        self.update_clock()
         self.update_power_mode_ui()
         self.update_system_stats()
         self.load_notifications()
@@ -1036,7 +1020,6 @@ class NotificationCenterDashboard(Gtk.Window):
 
     def periodic_update(self):
         if not self.is_closing:
-            self.update_clock()
             self.update_system_stats()
             self.load_notifications()
             return True
