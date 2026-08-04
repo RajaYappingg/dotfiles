@@ -163,56 +163,56 @@ window.cal-window {{
     letter-spacing: 1.2px;
 }}
 
-.weekday-lbl {
+.weekday-lbl {{
     font-size: 13px;
     font-weight: 800;
     color: rgba(255, 255, 255, 0.75);
     padding: 6px 0px;
-}
+}}
 
-.weekday-lbl.sunday {
+.weekday-lbl.sunday {{
     color: #ff5555;
-}
+}}
 
-.day-num {
+.day-num {{
     font-size: 15px;
     font-weight: 700;
     color: #ffffff;
     min-width: 36px;
     min-height: 36px;
     border-radius: 12px;
-}
+}}
 
-.day-red {
+.day-red {{
     color: #ff5555;
     font-weight: 800;
-}
+}}
 
-.day-other-m {
+.day-other-m {{
     color: rgba(255, 255, 255, 0.25);
     font-weight: 500;
-}
+}}
 
-.day-today-pill {
+.day-today-pill {{
     background-color: #ffffff;
     color: #0f172a;
     font-weight: 900;
     border-radius: 12px;
     box-shadow: 0 4px 16px rgba(255, 255, 255, 0.50);
-}
+}}
 
-.day-today-pill.day-red {
+.day-today-pill.day-red {{
     background-color: #ff5555;
     color: #ffffff;
     box-shadow: 0 4px 16px rgba(255, 85, 85, 0.60);
-}
+}}
 
-.holiday-notice-lbl {
+.holiday-notice-lbl {{
     font-size: 11px;
     font-weight: 800;
     color: #ff5555;
     margin-top: 4px;
-}
+}}
 
 /* Center Clock Section */
 .clock-main-text {{
