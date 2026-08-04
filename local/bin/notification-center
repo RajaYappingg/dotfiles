@@ -725,9 +725,17 @@ class NotificationCenterDashboard(Gtk.Window):
 
         try:
             if not getattr(self, 'is_user_interacting_b', False):
-                b_max = float(self.get_cmd_out("brightnessctl m") or "255")
-                b_cur = float(self.get_cmd_out("brightnessctl g") or "128")
-                b_val = (b_cur / b_max) * 100
+                b_val = 100
+                if os.path.exists("/tmp/.brightness_level"):
+                    try:
+                        with open("/tmp/.brightness_level") as f:
+                            b_val = float(f.read().strip())
+                    except Exception:
+                        pass
+                else:
+                    b_max = float(self.get_cmd_out("brightnessctl m") or "255")
+                    b_cur = float(self.get_cmd_out("brightnessctl g") or "128")
+                    b_val = (b_cur / b_max) * 100
                 self.scale_b.handler_block(self.scale_b_sig)
                 self.scale_b.set_value(b_val)
                 self.scale_b.handler_unblock(self.scale_b_sig)
@@ -750,8 +758,8 @@ class NotificationCenterDashboard(Gtk.Window):
 
     def on_b_change(self, scale):
         self.is_user_interacting_b = True
-        val = max(1, int(scale.get_value()))
-        self.run_cmd(f"brightnessctl -q set {val}%")
+        val = max(10, int(scale.get_value()))
+        self.run_cmd(f"/home/zaki/.local/bin/change-brightness {val}")
         GLib.timeout_add(1500, self._reset_b_interacting)
 
     def load_notifications(self):
