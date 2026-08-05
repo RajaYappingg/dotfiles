@@ -21,19 +21,18 @@
 ---- MONITORS ----
 ------------------
 
--- Monitor Utama 180Hz (MSI G255F - HDMI-A-1) sebagai Master Origin (0x0)
+-- See https://wiki.hypr.land/Configuring/Basics/Monitors/
 hl.monitor({
-    output   = "HDMI-A-1",
-    mode     = "1920x1080@180",
+    output   = "eDP-1",
+    mode     = "1920x1080@144",
     position = "0x0",
     scale    = 1,
 })
 
--- Monitor Laptop 144Hz (eDP-1) di sebelah kanan (1920x0)
 hl.monitor({
-    output   = "eDP-1",
-    mode     = "1920x1080@144",
-    position = "1920x0",
+    output   = "HDMI-A-1",
+    mode     = "1920x1080@180",
+    position = "auto-right",
     scale    = 1,
 })
 
