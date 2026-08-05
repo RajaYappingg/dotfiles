@@ -660,6 +660,11 @@ class MinimalAestheticLockScreen(Gtk.Window):
             else:
                 self.lbl_status.set_markup("<span foreground='#ff4444'>✕ Incorrect password</span>")
 
+            # Play Muda Muda sound effect on wrong password
+            muda_sound = os.path.expanduser("~/.local/share/sounds/mudamuda.mp3")
+            if os.path.exists(muda_sound):
+                subprocess.Popen(["mpv", "--no-video", "--volume=100", muda_sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
             self.entry_pass.set_text("")
             self.dots_widget.set_dot_count(0)
             self.entry_pass.grab_focus()
