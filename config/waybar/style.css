@@ -42,25 +42,6 @@ window#waybar {
 #network,
 #pulseaudio {
     padding: 3px 10px;
-    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-#network small,
-#pulseaudio small {
-    font-size: 0px;
-    opacity: 0;
-    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-#network:hover small,
-#pulseaudio:hover small {
-    font-size: 12.5px;
-    opacity: 1;
-}
-
-#network:hover,
-#pulseaudio:hover {
-    padding: 3px 14px;
 }
 
 #battery.full:not(.discharging),
