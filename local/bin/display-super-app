@@ -3,11 +3,12 @@ import os
 import sys
 import subprocess
 import json
+import math
 
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gtk, Gdk, GLib, cairo
 
 CSS = b"""
 * {
@@ -66,6 +67,18 @@ window.superapp-window {
     font-weight: bold;
 }
 
+.card-badge.primary {
+    background-color: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.4);
+}
+
+.card-badge.off {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
 .preset-btn {
     background-color: #1e293b;
     color: #e2e8f0;
@@ -78,6 +91,22 @@ window.superapp-window {
 
 .preset-btn:hover {
     background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+.pos-btn {
+    background-color: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.pos-btn:hover {
+    background-color: #1e293b;
     color: #ffffff;
     border-color: #38bdf8;
 }
@@ -102,6 +131,53 @@ window.superapp-window {
     background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
     color: #ffffff;
     border-color: #38bdf8;
+}
+
+.toggle-btn-on {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.toggle-btn-on:hover {
+    background-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.toggle-btn-off {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.toggle-btn-off:hover {
+    background-color: rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.primary-btn {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.primary-btn:hover {
+    background-color: rgba(251, 191, 36, 0.3);
+    color: #ffffff;
 }
 
 .quick-bright-btn {
@@ -153,13 +229,209 @@ scale slider {
 }
 """
 
+class MonitorCanvas(Gtk.DrawingArea):
+    def __init__(self, parent_app):
+        super().__init__()
+        self.app = parent_app
+        self.set_size_request(-1, 160)
+        self.add_events(
+            Gdk.EventMask.BUTTON_PRESS_MASK |
+            Gdk.EventMask.BUTTON_RELEASE_MASK |
+            Gdk.EventMask.POINTER_MOTION_MASK
+        )
+
+        self.connect("draw", self.on_draw)
+        self.connect("button-press-event", self.on_button_press)
+        self.connect("button-release-event", self.on_button_release)
+        self.connect("motion-notify-event", self.on_motion_notify)
+
+        self.dragged_mon = None
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+
+        # Mon positions in desktop coordinates
+        # Mon 1 (eDP-1): (0, 0)
+        # Mon 2 (HDMI-A-1): (1920, 0) default
+        self.m1_pos = [0, 0]
+        self.m2_pos = [1920, 0]
+
+    def set_mon_positions(self, m1_pos, m2_pos):
+        self.m1_pos = list(m1_pos)
+        self.m2_pos = list(m2_pos)
+        self.queue_draw()
+
+    def get_layout_bounds(self):
+        # Scale 1920x1080 screens to fit inside canvas
+        w = self.get_allocated_width() or 700
+        h = self.get_allocated_height() or 160
+
+        # Mon rect aspect ratio (16:9 -> 120x67 px on canvas)
+        mon_w, mon_h = 130, 73
+        center_x, center_y = w / 2, h / 2
+
+        # Relative offset: 1920px -> ~140px on canvas
+        scale = 140.0 / 1920.0
+
+        # Calculate canvas rects for mon 1 and mon 2
+        m1_cx = center_x + self.m1_pos[0] * scale - (mon_w / 2 if self.m1_pos[0] == 0 and self.m2_pos[0] == 0 else 0)
+        m1_cy = center_y + self.m1_pos[1] * scale
+
+        m2_cx = center_x + self.m2_pos[0] * scale
+        m2_cy = center_y + self.m2_pos[1] * scale
+
+        # Adjust center if m2 is right of m1
+        if self.m2_pos[0] > 0:
+            m1_x = center_x - mon_w - 6
+            m2_x = center_x + 6
+            m1_y = center_y - mon_h / 2
+            m2_y = center_y - mon_h / 2
+        elif self.m2_pos[0] < 0:
+            m2_x = center_x - mon_w - 6
+            m1_x = center_x + 6
+            m1_y = center_y - mon_h / 2
+            m2_y = center_y - mon_h / 2
+        elif self.m2_pos[1] < 0:
+            m1_x = center_x - mon_w / 2
+            m2_x = center_x - mon_w / 2
+            m2_y = center_y - mon_h - 6
+            m1_y = center_y + 6
+        elif self.m2_pos[1] > 0:
+            m1_x = center_x - mon_w / 2
+            m2_x = center_x - mon_w / 2
+            m1_y = center_y - mon_h - 6
+            m2_y = center_y + 6
+        else: # Mirror
+            m1_x = center_x - mon_w / 2
+            m2_x = center_x - mon_w / 2
+            m1_y = center_y - mon_h / 2
+            m2_y = center_y - mon_h / 2
+
+        r1 = (m1_x, m1_y, mon_w, mon_h)
+        r2 = (m2_x, m2_y, mon_w, mon_h)
+        return r1, r2
+
+    def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+
+        # Canvas background grid
+        cr.set_source_rgba(0.06, 0.09, 0.16, 1.0)
+        cr.rectangle(0, 0, w, h)
+        cr.fill()
+
+        # Border
+        cr.set_source_rgba(0.2, 0.3, 0.4, 0.4)
+        cr.set_line_width(1)
+        cr.rectangle(1, 1, w - 2, h - 2)
+        cr.stroke()
+
+        r1, r2 = self.get_layout_bounds()
+
+        # Draw Monitor 1 (eDP-1 Laptop)
+        self.draw_monitor_box(cr, r1, "💻 Laptop (eDP-1)", self.app.m1_enabled, self.app.primary_mon == "eDP-1", "#38bdf8")
+
+        # Draw Monitor 2 (HDMI-A-1 MSI)
+        self.draw_monitor_box(cr, r2, "🖥️ Monitor 2 (HDMI-A-1)", self.app.m2_enabled, self.app.primary_mon == "HDMI-A-1", "#818cf8")
+
+    def draw_monitor_box(self, cr, rect, label, is_enabled, is_primary, color_hex):
+        x, y, w, h = rect
+        
+        # Parse color
+        if is_enabled:
+            cr.set_source_rgba(0.12, 0.18, 0.28, 0.9)
+        else:
+            cr.set_source_rgba(0.08, 0.08, 0.12, 0.6)
+
+        # Rounded rectangle
+        radius = 8
+        cr.new_sub_path()
+        cr.arc(x + w - radius, y + radius, radius, -math.pi/2, 0)
+        cr.arc(x + w - radius, y + h - radius, radius, 0, math.pi/2)
+        cr.arc(x + radius, y + h - radius, radius, math.pi/2, math.pi)
+        cr.arc(x + radius, y + radius, radius, math.pi, 3*math.pi/2)
+        cr.close_path()
+        cr.fill_preserve()
+
+        # Border color
+        if is_primary:
+            cr.set_source_rgba(0.98, 0.75, 0.14, 0.9) # Gold for primary
+            cr.set_line_width(2.5)
+        elif is_enabled:
+            cr.set_source_rgba(0.22, 0.74, 0.97, 0.7) # Cyan
+            cr.set_line_width(1.5)
+        else:
+            cr.set_source_rgba(0.93, 0.27, 0.27, 0.5) # Red for off
+            cr.set_line_width(1.5)
+
+        cr.stroke()
+
+        # Monitor Label & Badge
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9 if is_enabled else 0.4)
+        cr.set_font_size(10)
+        cr.move_to(x + 10, y + 25)
+        cr.show_text(label)
+
+        status_str = "OFF" if not is_enabled else ("PRIMARY (0,0)" if is_primary else "SECONDARY")
+        cr.set_font_size(9)
+        if is_primary:
+            cr.set_source_rgba(0.98, 0.75, 0.14, 1.0)
+        elif is_enabled:
+            cr.set_source_rgba(0.58, 0.74, 0.97, 0.8)
+        else:
+            cr.set_source_rgba(0.93, 0.27, 0.27, 0.8)
+        
+        cr.move_to(x + 10, y + 45)
+        cr.show_text(f"[{status_str}]")
+
+    def on_button_press(self, widget, event):
+        if event.button == 1:
+            r1, r2 = self.get_layout_bounds()
+            ex, ey = event.x, event.y
+            if r2[0] <= ex <= r2[0] + r2[2] and r2[1] <= ey <= r2[1] + r2[3]:
+                self.dragged_mon = "HDMI-A-1"
+                self.drag_start_x = ex
+                self.drag_start_y = ey
+            elif r1[0] <= ex <= r1[0] + r1[2] and r1[1] <= ey <= r1[1] + r1[3]:
+                self.dragged_mon = "eDP-1"
+                self.drag_start_x = ex
+                self.drag_start_y = ey
+
+    def on_motion_notify(self, widget, event):
+        if self.dragged_mon:
+            dx = event.x - self.drag_start_x
+            dy = event.y - self.drag_start_y
+
+            if abs(dx) > 35:
+                if dx > 0:
+                    self.app.set_mon2_position("right")
+                else:
+                    self.app.set_mon2_position("left")
+                self.dragged_mon = None
+            elif abs(dy) > 25:
+                if dy > 0:
+                    self.app.set_mon2_position("bottom")
+                else:
+                    self.app.set_mon2_position("top")
+                self.dragged_mon = None
+
+    def on_button_release(self, widget, event):
+        self.dragged_mon = None
+
 class DisplaySuperApp(Gtk.Window):
     def __init__(self):
-        super().__init__(title="Display Control Super App")
+        super().__init__(title="Display & Monitor Super App")
         self.set_name("superapp-window")
-        self.set_default_size(780, 560)
+        self.set_default_size(820, 680)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_wmclass("floating_sys", "floating_sys")
+
+        # Monitor state tracking
+        self.m1_enabled = True
+        self.m2_enabled = True
+        self.primary_mon = "eDP-1" # "eDP-1" or "HDMI-A-1"
+        self.m2_pos_name = "right" # "right", "left", "top", "bottom", "mirror"
+
+        self.detect_current_state()
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(main_box)
@@ -169,9 +441,9 @@ class DisplaySuperApp(Gtk.Window):
         header.get_style_context().add_class("header-box")
 
         title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        lbl_title = Gtk.Label(label="🖥️ DISPLAY CONTROL SUPER APP", xalign=0)
+        lbl_title = Gtk.Label(label="🖥️ DISPLAY & MONITOR SUPER APP", xalign=0)
         lbl_title.get_style_context().add_class("header-title")
-        lbl_sub = Gtk.Label(label="Pusat Kontrol Refresh Rate (Hz) & Kecerahan Layar Hyprland", xalign=0)
+        lbl_sub = Gtk.Label(label="Pusat Kontrol Layar, Posisi Drag & Drop, Refresh Rate & Kecerahan", xalign=0)
         lbl_sub.get_style_context().add_class("header-sub")
         title_vbox.pack_start(lbl_title, False, False, 0)
         title_vbox.pack_start(lbl_sub, False, False, 0)
@@ -196,7 +468,42 @@ class DisplaySuperApp(Gtk.Window):
         scrolled.add(content_vbox)
         main_box.pack_start(scrolled, True, True, 0)
 
-        # 2. Quick Presets Section
+        # 2. Interactive Monitor Canvas & Layout Arrangement Card
+        canvas_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        canvas_card.get_style_context().add_class("card-box")
+
+        c_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_c_title = Gtk.Label(label="📐 Tata Letak & Posisi Monitor (Drag & Drop Canvas)", xalign=0)
+        lbl_c_title.get_style_context().add_class("card-title")
+        c_header.pack_start(lbl_c_title, True, True, 0)
+        canvas_card.pack_start(c_header, False, False, 0)
+
+        # Interactive Canvas
+        self.canvas = MonitorCanvas(self)
+        canvas_card.pack_start(self.canvas, False, False, 0)
+
+        # Quick Position Controls
+        pos_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        pos_box.set_homogeneous(True)
+
+        positions = [
+            ("⬅️ Kiri", "left"),
+            ("➡️ Kanan", "right"),
+            ("⬆️ Atas", "top"),
+            ("⬇️ Bawah", "bottom"),
+            ("🖥️ Mirror", "mirror"),
+        ]
+
+        for p_label, p_val in positions:
+            btn = Gtk.Button(label=p_label)
+            btn.get_style_context().add_class("pos-btn")
+            btn.connect("clicked", lambda b, val=p_val: self.set_mon2_position(val))
+            pos_box.pack_start(btn, True, True, 0)
+
+        canvas_card.pack_start(pos_box, False, False, 0)
+        content_vbox.pack_start(canvas_card, False, False, 0)
+
+        # 3. Quick Mode Presets Section
         preset_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         preset_card.get_style_context().add_class("card-box")
 
@@ -225,21 +532,40 @@ class DisplaySuperApp(Gtk.Window):
         preset_card.pack_start(preset_grid, False, False, 0)
         content_vbox.pack_start(preset_card, False, False, 0)
 
-        # 3. Monitor 2 Control Card (MSI G255F - HDMI-A-1)
-        mon2_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        mon2_card.get_style_context().add_class("card-box")
+        # 4. Monitor 2 Control Card (MSI G255F - HDMI-A-1)
+        self.mon2_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.mon2_card.get_style_context().add_class("card-box")
 
         m2_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         lbl_m2 = Gtk.Label(label="🖥️ MONITOR 2 (MSI G255F - HDMI-A-1)", xalign=0)
         lbl_m2.get_style_context().add_class("card-title")
-        badge_m2 = Gtk.Label(label="EXTERNAL DISPLAY")
-        badge_m2.get_style_context().add_class("card-badge")
+        
+        self.badge_m2_status = Gtk.Label(label="OFF" if not self.m2_enabled else ("PRIMARY" if self.primary_mon == "HDMI-A-1" else "SECONDARY"))
+        self.badge_m2_status.get_style_context().add_class("card-badge")
+        if self.primary_mon == "HDMI-A-1":
+            self.badge_m2_status.get_style_context().add_class("primary")
+
         m2_header.pack_start(lbl_m2, True, True, 0)
-        m2_header.pack_start(badge_m2, False, False, 0)
-        mon2_card.pack_start(m2_header, False, False, 0)
+        m2_header.pack_start(self.badge_m2_status, False, False, 0)
+        self.mon2_card.pack_start(m2_header, False, False, 0)
+
+        # Monitor 2 Action Buttons (Primary & Power Toggle)
+        m2_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        
+        self.btn_m2_primary = Gtk.Button(label="⭐ Set As Primary Display")
+        self.btn_m2_primary.get_style_context().add_class("primary-btn")
+        self.btn_m2_primary.connect("clicked", lambda b: self.set_primary_display("HDMI-A-1"))
+        m2_actions.pack_start(self.btn_m2_primary, True, True, 0)
+
+        self.btn_m2_power = Gtk.Button(label="🔴 Matikan Layar" if self.m2_enabled else "🟢 Nyalakan Layar")
+        self.btn_m2_power.get_style_context().add_class("toggle-btn-on" if self.m2_enabled else "toggle-btn-off")
+        self.btn_m2_power.connect("clicked", lambda b: self.toggle_monitor_power("HDMI-A-1"))
+        m2_actions.pack_start(self.btn_m2_power, False, False, 0)
+
+        self.mon2_card.pack_start(m2_actions, False, False, 0)
 
         # Monitor 2 Refresh Rate (Hz)
-        mon2_card.pack_start(Gtk.Label(label="⚡ Refresh Rate (Hz):", xalign=0), False, False, 0)
+        self.mon2_card.pack_start(Gtk.Label(label="⚡ Refresh Rate (Hz):", xalign=0), False, False, 0)
         m2_hz_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         m2_hz_box.set_homogeneous(True)
 
@@ -256,10 +582,10 @@ class DisplaySuperApp(Gtk.Window):
             m2_hz_box.pack_start(btn, True, True, 0)
             self.m2_hz_buttons[r] = btn
 
-        mon2_card.pack_start(m2_hz_box, False, False, 0)
+        self.mon2_card.pack_start(m2_hz_box, False, False, 0)
 
         # Monitor 2 Brightness Slider
-        mon2_card.pack_start(Gtk.Label(label="🔆 Kecerahan Screen:", xalign=0), False, False, 0)
+        self.mon2_card.pack_start(Gtk.Label(label="🔆 Kecerahan Screen:", xalign=0), False, False, 0)
         m2_b_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
         curr_m2_b = self.get_m2_brightness()
@@ -280,24 +606,43 @@ class DisplaySuperApp(Gtk.Window):
             btn.connect("clicked", lambda b, val=p: self.m2_scale.set_value(val))
             m2_b_box.pack_start(btn, False, False, 0)
 
-        mon2_card.pack_start(m2_b_box, False, False, 0)
-        content_vbox.pack_start(mon2_card, False, False, 0)
+        self.mon2_card.pack_start(m2_b_box, False, False, 0)
+        content_vbox.pack_start(self.mon2_card, False, False, 0)
 
-        # 4. Monitor 1 Control Card (BOE Laptop - eDP-1)
-        mon1_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        mon1_card.get_style_context().add_class("card-box")
+        # 5. Monitor 1 Control Card (BOE Laptop - eDP-1)
+        self.mon1_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.mon1_card.get_style_context().add_class("card-box")
 
         m1_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         lbl_m1 = Gtk.Label(label="💻 MONITOR 1 (Laptop BOE - eDP-1)", xalign=0)
         lbl_m1.get_style_context().add_class("card-title")
-        badge_m1 = Gtk.Label(label="PRIMARY LAPTOP")
-        badge_m1.get_style_context().add_class("card-badge")
+
+        self.badge_m1_status = Gtk.Label(label="OFF" if not self.m1_enabled else ("PRIMARY" if self.primary_mon == "eDP-1" else "SECONDARY"))
+        self.badge_m1_status.get_style_context().add_class("card-badge")
+        if self.primary_mon == "eDP-1":
+            self.badge_m1_status.get_style_context().add_class("primary")
+
         m1_header.pack_start(lbl_m1, True, True, 0)
-        m1_header.pack_start(badge_m1, False, False, 0)
-        mon1_card.pack_start(m1_header, False, False, 0)
+        m1_header.pack_start(self.badge_m1_status, False, False, 0)
+        self.mon1_card.pack_start(m1_header, False, False, 0)
+
+        # Monitor 1 Action Buttons
+        m1_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        
+        self.btn_m1_primary = Gtk.Button(label="⭐ Set As Primary Display")
+        self.btn_m1_primary.get_style_context().add_class("primary-btn")
+        self.btn_m1_primary.connect("clicked", lambda b: self.set_primary_display("eDP-1"))
+        m1_actions.pack_start(self.btn_m1_primary, True, True, 0)
+
+        self.btn_m1_power = Gtk.Button(label="🔴 Matikan Layar" if self.m1_enabled else "🟢 Nyalakan Layar")
+        self.btn_m1_power.get_style_context().add_class("toggle-btn-on" if self.m1_enabled else "toggle-btn-off")
+        self.btn_m1_power.connect("clicked", lambda b: self.toggle_monitor_power("eDP-1"))
+        m1_actions.pack_start(self.btn_m1_power, False, False, 0)
+
+        self.mon1_card.pack_start(m1_actions, False, False, 0)
 
         # Monitor 1 Refresh Rate (Hz)
-        mon1_card.pack_start(Gtk.Label(label="⚡ Refresh Rate (Hz):", xalign=0), False, False, 0)
+        self.mon1_card.pack_start(Gtk.Label(label="⚡ Refresh Rate (Hz):", xalign=0), False, False, 0)
         m1_hz_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         m1_hz_box.set_homogeneous(True)
 
@@ -314,10 +659,10 @@ class DisplaySuperApp(Gtk.Window):
             m1_hz_box.pack_start(btn, True, True, 0)
             self.m1_hz_buttons[r] = btn
 
-        mon1_card.pack_start(m1_hz_box, False, False, 0)
+        self.mon1_card.pack_start(m1_hz_box, False, False, 0)
 
         # Monitor 1 Brightness Slider
-        mon1_card.pack_start(Gtk.Label(label="🔆 Kecerahan Screen:", xalign=0), False, False, 0)
+        self.mon1_card.pack_start(Gtk.Label(label="🔆 Kecerahan Screen:", xalign=0), False, False, 0)
         m1_b_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
         curr_m1_b = self.get_m1_brightness()
@@ -338,11 +683,54 @@ class DisplaySuperApp(Gtk.Window):
             btn.connect("clicked", lambda b, val=p: self.m1_scale.set_value(val))
             m1_b_box.pack_start(btn, False, False, 0)
 
-        mon1_card.pack_start(m1_b_box, False, False, 0)
-        content_vbox.pack_start(mon1_card, False, False, 0)
+        self.mon1_card.pack_start(m1_b_box, False, False, 0)
+        content_vbox.pack_start(self.mon1_card, False, False, 0)
 
         self.connect("key-press-event", self.on_key_press)
         self.connect("destroy", Gtk.main_quit)
+
+    def detect_current_state(self):
+        try:
+            res = subprocess.run(["hyprctl", "-j", "monitors"], capture_output=True, text=True)
+            monitors = json.loads(res.stdout)
+            
+            m1_found = False
+            m2_found = False
+
+            for m in monitors:
+                name = m.get("name")
+                disabled = m.get("disabled", False)
+                x = m.get("x", 0)
+                y = m.get("y", 0)
+
+                if name == "eDP-1":
+                    m1_found = True
+                    self.m1_enabled = not disabled
+                    if x == 0 and y == 0:
+                        self.primary_mon = "eDP-1"
+                elif name == "HDMI-A-1":
+                    m2_found = True
+                    self.m2_enabled = not disabled
+                    if x == 0 and y == 0:
+                        self.primary_mon = "HDMI-A-1"
+                    if x > 0:
+                        self.m2_pos_name = "right"
+                    elif x < 0:
+                        self.m2_pos_name = "left"
+                    elif y < 0:
+                        self.m2_pos_name = "top"
+                    elif y > 0:
+                        self.m2_pos_name = "bottom"
+                    elif x == 0 and y == 0 and self.primary_mon != "HDMI-A-1":
+                        self.m2_pos_name = "mirror"
+
+            if not m1_found:
+                self.m1_enabled = False
+            if not m2_found:
+                self.m2_enabled = False
+
+        except Exception:
+            pass
 
     def get_hz(self, mon_name):
         try:
@@ -374,6 +762,108 @@ class DisplaySuperApp(Gtk.Window):
         except Exception:
             pass
         return 100
+
+    def set_mon2_position(self, pos_name):
+        self.m2_pos_name = pos_name
+        hz = self.get_hz("HDMI-A-1")
+
+        if pos_name == "right":
+            pos_str = "1920x0"
+            m1_pos, m2_pos = (0, 0), (1920, 0)
+        elif pos_name == "left":
+            pos_str = "-1920x0"
+            m1_pos, m2_pos = (0, 0), (-1920, 0)
+        elif pos_name == "top":
+            pos_str = "0x-1080"
+            m1_pos, m2_pos = (0, 0), (0, -1080)
+        elif pos_name == "bottom":
+            pos_str = "0x1080"
+            m1_pos, m2_pos = (0, 0), (0, 1080)
+        elif pos_name == "mirror":
+            pos_str = "0x0"
+            m1_pos, m2_pos = (0, 0), (0, 0)
+
+        cmd = f"hl.monitor({{ output = 'HDMI-A-1', mode = '1920x1080@{hz}', position = '{pos_str}', scale = 1 }})"
+        subprocess.run(["hyprctl", "eval", cmd], capture_output=True)
+        self.canvas.set_mon_positions(m1_pos, m2_pos)
+        subprocess.run(["notify-send", "-r", "9915", "-i", "video-display", "Tata Letak Monitor", f"Posisi Monitor 2 diatur ke: {pos_name.upper()}"])
+
+    def set_primary_display(self, mon_name):
+        self.primary_mon = mon_name
+        if mon_name == "HDMI-A-1":
+            hz2 = self.get_hz("HDMI-A-1")
+            hz1 = self.get_hz("eDP-1")
+            cmd2 = f"hl.monitor({{ output = 'HDMI-A-1', mode = '1920x1080@{hz2}', position = '0x0', scale = 1 }})"
+            cmd1 = f"hl.monitor({{ output = 'eDP-1', mode = '1920x1080@{hz1}', position = '1920x0', scale = 1 }})"
+            subprocess.run(["hyprctl", "eval", cmd2], capture_output=True)
+            subprocess.run(["hyprctl", "eval", cmd1], capture_output=True)
+            self.canvas.set_mon_positions((1920, 0), (0, 0))
+            self.badge_m2_status.set_text("PRIMARY")
+            self.badge_m2_status.get_style_context().add_class("primary")
+            self.badge_m1_status.set_text("SECONDARY")
+            self.badge_m1_status.get_style_context().remove_class("primary")
+        else:
+            hz2 = self.get_hz("HDMI-A-1")
+            hz1 = self.get_hz("eDP-1")
+            cmd1 = f"hl.monitor({{ output = 'eDP-1', mode = '1920x1080@{hz1}', position = '0x0', scale = 1 }})"
+            cmd2 = f"hl.monitor({{ output = 'HDMI-A-1', mode = '1920x1080@{hz2}', position = '1920x0', scale = 1 }})"
+            subprocess.run(["hyprctl", "eval", cmd1], capture_output=True)
+            subprocess.run(["hyprctl", "eval", cmd2], capture_output=True)
+            self.canvas.set_mon_positions((0, 0), (1920, 0))
+            self.badge_m1_status.set_text("PRIMARY")
+            self.badge_m1_status.get_style_context().add_class("primary")
+            self.badge_m2_status.set_text("SECONDARY")
+            self.badge_m2_status.get_style_context().remove_class("primary")
+
+        subprocess.run(["notify-send", "-r", "9916", "-i", "video-display", "Primary Display Changed", f"⭐ {mon_name} diatur sebagai Primary Display!"])
+
+    def toggle_monitor_power(self, mon_name):
+        if mon_name == "HDMI-A-1":
+            if self.m2_enabled:
+                cmd = "hl.monitor({ output = 'HDMI-A-1', mode = 'disable' })"
+                subprocess.run(["hyprctl", "eval", cmd], capture_output=True)
+                self.m2_enabled = False
+                self.btn_m2_power.set_label("🟢 Nyalakan Layar")
+                self.btn_m2_power.get_style_context().remove_class("toggle-btn-on")
+                self.btn_m2_power.get_style_context().add_class("toggle-btn-off")
+                self.badge_m2_status.set_text("OFF")
+                self.badge_m2_status.get_style_context().add_class("off")
+                subprocess.run(["notify-send", "-r", "9917", "-i", "display", "Monitor 2", "🔴 Monitor 2 Dinonaktifkan"])
+            else:
+                hz = self.get_hz("HDMI-A-1") or 180
+                cmd = f"hl.monitor({{ output = 'HDMI-A-1', mode = '1920x1080@{hz}', position = '1920x0', scale = 1 }})"
+                subprocess.run(["hyprctl", "eval", cmd], capture_output=True)
+                self.m2_enabled = True
+                self.btn_m2_power.set_label("🔴 Matikan Layar")
+                self.btn_m2_power.get_style_context().remove_class("toggle-btn-off")
+                self.btn_m2_power.get_style_context().add_class("toggle-btn-on")
+                self.badge_m2_status.set_text("SECONDARY" if self.primary_mon != "HDMI-A-1" else "PRIMARY")
+                self.badge_m2_status.get_style_context().remove_class("off")
+                subprocess.run(["notify-send", "-r", "9917", "-i", "display", "Monitor 2", "🟢 Monitor 2 Dinyalakan"])
+        else: # eDP-1
+            if self.m1_enabled:
+                cmd = "hl.monitor({ output = 'eDP-1', mode = 'disable' })"
+                subprocess.run(["hyprctl", "eval", cmd], capture_output=True)
+                self.m1_enabled = False
+                self.btn_m1_power.set_label("🟢 Nyalakan Layar")
+                self.btn_m1_power.get_style_context().remove_class("toggle-btn-on")
+                self.btn_m1_power.get_style_context().add_class("toggle-btn-off")
+                self.badge_m1_status.set_text("OFF")
+                self.badge_m1_status.get_style_context().add_class("off")
+                subprocess.run(["notify-send", "-r", "9918", "-i", "display", "Monitor Laptop", "🔴 Monitor Laptop Dinonaktifkan"])
+            else:
+                hz = self.get_hz("eDP-1") or 144
+                cmd = f"hl.monitor({{ output = 'eDP-1', mode = '1920x1080@{hz}', position = '0x0', scale = 1 }})"
+                subprocess.run(["hyprctl", "eval", cmd], capture_output=True)
+                self.m1_enabled = True
+                self.btn_m1_power.set_label("🔴 Matikan Layar")
+                self.btn_m1_power.get_style_context().remove_class("toggle-btn-off")
+                self.btn_m1_power.get_style_context().add_class("toggle-btn-on")
+                self.badge_m1_status.set_text("PRIMARY" if self.primary_mon == "eDP-1" else "SECONDARY")
+                self.badge_m1_status.get_style_context().remove_class("off")
+                subprocess.run(["notify-send", "-r", "9918", "-i", "display", "Monitor Laptop", "🟢 Monitor Laptop Dinyalakan"])
+
+        self.canvas.queue_draw()
 
     def set_m2_hz(self, rate):
         subprocess.run(["/home/zaki/.local/bin/monitor2-hz", str(rate)])
