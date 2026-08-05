@@ -349,7 +349,10 @@ class OrbitClockArea(Gtk.Overlay):
         h = widget.get_allocated_height()
         xc, yc = w / 2.0, h / 2.0
 
-        # Draw smooth animated rotating dashed orbital ellipse ring
+        rx = 108.0 * 1.38
+        ry = 108.0 * 0.70
+
+        # 1. Draw smooth animated rotating dashed orbital ellipse ring
         cr.save()
         cr.translate(xc, yc)
         cr.scale(1.38, 0.70)
@@ -359,10 +362,57 @@ class OrbitClockArea(Gtk.Overlay):
 
         cr.set_dash([5.0, 7.0])
         cr.set_line_width(2.0)
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.30)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.28)
         cr.arc(0, 0, 108, 0, 2 * math.pi)
         cr.stroke()
         cr.restore()
+
+        # 2. Orbiting Sun/Moon Icon Node (Following real-time 12-hour clock hand position)
+        now = time.localtime()
+        hours = now.tm_hour % 12
+        minutes = now.tm_min
+        seconds = now.tm_sec
+
+        total_hours = hours + (minutes / 60.0) + (seconds / 3600.0)
+        clock_angle = (total_hours / 12.0) * (2 * math.pi) - (math.pi / 2.0)
+
+        px = xc + rx * math.cos(clock_angle)
+        py = yc + ry * math.sin(clock_angle)
+
+        # Sun or Moon Nerd Font icon based on time of day (Day: 06:00-18:00, Night: 18:00-06:00)
+        is_daytime = 6 <= now.tm_hour < 18
+        if is_daytime:
+            icon_symbol = "󰖨"  # Sun Nerd Font icon
+            icon_rgb = (1.0, 0.82, 0.28)  # Warm Gold / Sun Yellow
+        else:
+            icon_symbol = "󰽤"  # Moon Nerd Font icon
+            icon_rgb = (0.75, 0.88, 1.0)  # Cool Lunar Blue
+
+        # Outer Glow Circle Node
+        cr.set_source_rgba(icon_rgb[0], icon_rgb[1], icon_rgb[2], 0.22)
+        cr.arc(px, py, 16.0, 0, 2 * math.pi)
+        cr.fill()
+
+        # Inner Pill Circle Node (Dark Glassmorphic Background)
+        bg_r, bg_g, bg_b = hex_to_rgb(BG_PILL_HEX)
+        cr.set_source_rgba(bg_r, bg_g, bg_b, 0.90)
+        cr.arc(px, py, 13.0, 0, 2 * math.pi)
+        cr.fill_preserve()
+
+        # Border Accent Ring
+        pr, pg, pb = PRIMARY_RGB
+        cr.set_source_rgba(pr, pg, pb, 0.70)
+        cr.set_line_width(1.5)
+        cr.stroke()
+
+        # Render Sun / Moon Nerd Font Icon centered inside the node
+        cr.set_source_rgba(icon_rgb[0], icon_rgb[1], icon_rgb[2], 0.98)
+        cr.select_font_face("JetBrainsMono Nerd Font", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(15)
+
+        ext = cr.text_extents(icon_symbol)
+        cr.move_to(px - ext.width / 2.0 - ext.x_bearing, py - ext.height / 2.0 - ext.y_bearing)
+        cr.show_text(icon_symbol)
 
 
 class MiniMetricMeter(Gtk.Box):
