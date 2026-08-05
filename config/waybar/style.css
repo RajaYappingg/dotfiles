@@ -36,15 +36,20 @@ window#waybar {
     border-radius: 9999px;
     padding: 3px 12px;
     margin: 1px 3px;
-#battery:empty,
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
 #battery.full:not(.discharging),
 #battery.charged:not(.discharging) {
-    display: none;
     margin: 0;
     padding: 0;
+    opacity: 0;
+    min-width: 0;
+    min-height: 0;
     border: none;
     background-color: transparent;
     box-shadow: none;
+    font-size: 0px;
 }
 
 #custom-notification.has-notifications {
