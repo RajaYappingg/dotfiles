@@ -68,6 +68,10 @@ hl.env("HYPRCURSOR_SIZE", "24")
 hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
 hl.env("MOZ_ENABLE_WAYLAND", "1")
+hl.env("LIBVA_DRIVER_NAME", "nvidia")
+hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+hl.env("GBM_BACKEND", "nvidia-drm")
+hl.env("NVD_BACKEND", "direct")
 hl.env("GDK_SCALE", "1")
 hl.env("XDG_DATA_DIRS", "/usr/share:/usr/local/share:/var/lib/flatpak/exports/share:/home/zaki/.local/share/flatpak/exports/share")
 
@@ -227,8 +231,14 @@ hl.config({
 
 hl.config({
     misc = {
+        vfr = false,                     -- Disable Variable Frame Rate (Fixes stutter/lag on 180Hz)
+        vrr = 0,                         -- Disable VRR conflict on multi-GPU
         force_default_wallpaper = -1,    -- Set to 0 or 1 to disable the anime mascot wallpapers
         disable_hyprland_logo   = false, -- If true disables the random hyprland logo / anime girl background. :(
+    },
+    render = {
+        explicit_sync = 2,               -- Explicit Sync for NVIDIA 610+ driver (Fixes buffer sync lag)
+        explicit_sync_kms = 2,
     },
 })
 
