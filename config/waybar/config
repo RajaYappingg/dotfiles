@@ -1,0 +1,137 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 30,
+    "spacing": 3,
+    "margin-top": 4,
+    "margin-left": 10,
+    "margin-right": 10,
+
+    "modules-left": [
+        "hyprland/workspaces"
+    ],
+    "modules-center": [
+        "clock"
+    ],
+    "modules-right": [
+        "custom/cpu",
+        "custom/memory",
+        "custom/gpu",
+        "custom/temperature",
+        "network",
+        "pulseaudio",
+        "battery",
+        "custom/notification",
+        "tray"
+    ],
+
+    "hyprland/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name}",
+        "on-click": "activate",
+        "persistent-workspaces": {
+            "*": [1, 2, 3, 4, 5, 6, 7, 8]
+        }
+    },
+
+    "hyprland/window": {
+        "format": "{}",
+        "max-length": 25,
+        "separate-outputs": true
+    },
+
+    "clock": {
+        "timezone": "Asia/Jakarta",
+        "format": "󰥔  {:%H:%M  •  %a, %d %b}",
+        "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+        "on-click": "/home/zaki/.local/bin/calendar-popup"
+    },
+
+    "custom/cpu": {
+        "exec": "/home/zaki/.local/bin/waybar-cpu",
+        "return-type": "json",
+        "interval": 2,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-cpu notify"
+    },
+
+    "custom/memory": {
+        "exec": "/home/zaki/.local/bin/waybar-memory",
+        "return-type": "json",
+        "interval": 3,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-memory notify"
+    },
+
+    "custom/gpu": {
+        "exec": "/home/zaki/.local/bin/waybar-gpu",
+        "return-type": "json",
+        "interval": 3,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-gpu notify"
+    },
+
+    "custom/temperature": {
+        "exec": "/home/zaki/.local/bin/waybar-temp",
+        "return-type": "json",
+        "interval": 3,
+        "format": "{}",
+        "on-click": "kitty --class floating_sys -e btop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-temp notify"
+    },
+
+    "network": {
+        "format-wifi": "󰤨  {essid}",
+        "format-ethernet": "󰈀  {ipaddr}",
+        "format-linked": "󰈀  {ifname} (No IP)",
+        "format-disconnected": "󰤭  Offline",
+        "tooltip-format": "󰩟 {ifname} via {gwaddr}",
+        "on-click": "kitty --class floating_wifi -e /home/zaki/.local/bin/wifi-menu",
+        "interval": 5
+    },
+
+    "pulseaudio": {
+        "format": "{icon}  {volume}%",
+        "format-muted": "󰝟  Muted",
+        "format-icons": {
+            "headphone": "",
+            "default": ["󰕿", "󰖀", "󰕾"]
+        },
+        "tooltip-format": "Volume: {volume}%\nKlik Kiri/Kanan: Buka Audio & Volume Control Mixer",
+        "on-click": "/home/zaki/.local/bin/audio-control-gui",
+        "on-click-right": "/home/zaki/.local/bin/audio-control-gui"
+    },
+
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon}  {capacity}%",
+        "format-charging": "󰂄  {capacity}%",
+        "format-plugged": "  {capacity}%",
+        "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+        "tooltip-format": "Battery: {capacity}%\nClick: Power Profiles Menu\nRight-Click: Battery Details",
+        "on-click": "/home/zaki/.local/bin/battery-menu",
+        "on-click-right": "/home/zaki/.local/bin/battery-info"
+    },
+
+    "custom/notification": {
+        "exec": "/home/zaki/.local/bin/waybar-notification",
+        "return-type": "json",
+        "interval": 2,
+        "format": "{}",
+        "on-click": "/home/zaki/.local/bin/waybar-notification pop",
+        "on-click-right": "/home/zaki/.local/bin/waybar-notification clear",
+        "on-click-middle": "/home/zaki/.local/bin/waybar-notification dnd"
+    },
+
+    "tray": {
+        "icon-size": 13,
+        "spacing": 8
+    }
+}
