@@ -50,6 +50,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("waybar")
     hl.exec_cmd("awww-daemon || swww-daemon")
     hl.exec_cmd("/home/zaki/.local/bin/brightness-daemon")
+    hl.exec_cmd("/home/zaki/.local/bin/monitor2-brightness-daemon")
     hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
 end)
 
@@ -114,7 +115,9 @@ hl.config({
         },
 
         -- Set to true to enable resizing windows by clicking and dragging on borders and gaps
-        resize_on_border = false,
+        resize_on_border = true,
+        extend_border_grab_area = 15,
+        hover_icon_on_border = true,
 
         -- Please see https://wiki.hypr.land/Configuring/Advanced-and-Cool/Tearing/ before you turn this on
         allow_tearing = false,
@@ -281,8 +284,9 @@ hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal))
 local closeWindowBind = hl.bind(mainMod .. " + C", hl.dsp.window.close())
 -- closeWindowBind:set_enabled(false)
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
-hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
+hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("dolphin"))
 hl.bind(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd("hyprctl dispatch togglefloating active && hyprctl dispatch resizeactive exact 720 420 && hyprctl dispatch centerwindow"))
 hl.bind(mainMod .. " + R", hl.dsp.exec_cmd(menu))
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("/home/zaki/.local/bin/wallpaper-picker"))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("/home/zaki/.local/bin/lockscreen"))
@@ -297,6 +301,12 @@ hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
 hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
 hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }))
+
+-- Move active window & snap floating window back to tiling grid with mainMod + SHIFT + arrow keys
+hl.bind(mainMod .. " + SHIFT + left",  hl.dsp.window.move({ direction = "left" }))
+hl.bind(mainMod .. " + SHIFT + right", hl.dsp.window.move({ direction = "right" }))
+hl.bind(mainMod .. " + SHIFT + up",    hl.dsp.window.move({ direction = "up" }))
+hl.bind(mainMod .. " + SHIFT + down",  hl.dsp.window.move({ direction = "down" }))
 
 -- Switch workspaces with mainMod + [0-9]
 -- Move active window to a workspace with mainMod + SHIFT + [0-9]
@@ -313,6 +323,8 @@ hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:mag
 -- Scroll through existing workspaces with mainMod + scroll
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
+hl.bind(mainMod .. " + SHIFT + mouse_down", hl.dsp.window.move({ workspace = "e+1" }))
+hl.bind(mainMod .. " + SHIFT + mouse_up",   hl.dsp.window.move({ workspace = "e-1" }))
 
 -- Move/resize windows with mainMod + LMB/RMB and dragging
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
@@ -520,3 +532,21 @@ hl.window_rule({
 
 
 
+
+--------------------------------
+---- CUSTOM USER KEYBINDINGS ----
+--------------------------------
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("firefox")) -- membuka firefox
+
+-- DISPLAY SUPER APP POPUP (Pusat Kontrol Semua Monitor)
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("/home/zaki/.local/bin/display-super-app")) -- Super App Popup
+hl.bind(mainMod .. " + ALT + D", hl.dsp.exec_cmd("/home/zaki/.local/bin/display-super-app")) -- Super App Popup (Alternatif)
+hl.bind(mainMod .. " + ALT + M", hl.dsp.exec_cmd("/home/zaki/.local/bin/display-super-app")) -- Super App Popup
+
+-- Pengaturan Monitor Kedua (HDMI-A-1 / MSI G255F) Direct Shortcuts
+hl.bind(mainMod .. " + ALT + Up", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-brightness +10")) -- Monitor 2: Kecerahan +10%
+hl.bind(mainMod .. " + ALT + Down", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-brightness -10")) -- Monitor 2: Kecerahan -10%
+hl.bind(mainMod .. " + ALT + H", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz cycle")) -- Monitor 2: Cycle Refresh Rate (60->120->144->165->180Hz)
+hl.bind(mainMod .. " + ALT + 1", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz 60")) -- Monitor 2: Quick Set 60Hz
+hl.bind(mainMod .. " + ALT + 2", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz 144")) -- Monitor 2: Quick Set 144Hz
+hl.bind(mainMod .. " + ALT + 3", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz 180")) -- Monitor 2: Quick Set 180Hz

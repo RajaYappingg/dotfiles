@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+
+BRIGHTNESS_FILE = "/tmp/.monitor2_brightness"
+
+def get_current_brightness():
+    try:
+        if os.path.exists(BRIGHTNESS_FILE):
+            with open(BRIGHTNESS_FILE, "r") as f:
+                return int(float(f.read().strip()))
+    except Exception:
+        pass
+    return 100
+
+def ensure_daemon_running():
+    try:
+        res = subprocess.run(["pgrep", "-f", "monitor2-brightness-daemon"], capture_output=True, text=True)
+        if not res.stdout.strip():
+            subprocess.Popen(["/home/zaki/.local/bin/monitor2-brightness-daemon"])
+    except Exception:
+        pass
+
+def set_brightness(val):
+    val = max(10, min(100, int(val)))
+    try:
+        with open(BRIGHTNESS_FILE, "w") as f:
+            f.write(str(val))
+    except Exception:
+        pass
+
+    ensure_daemon_running()
+
+    # Progress bar style notification
+    bars = int(val / 10)
+    bar_str = "█" * bars + "░" * (10 - bars)
+    subprocess.run(["notify-send", "-r", "9912", "-i", "display-brightness", "Kecerahan Monitor 2", f"{val}% [{bar_str}]"])
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: monitor2-brightness <+10|-10|value>")
+        sys.exit(1)
+
+    arg = sys.argv[1]
+    curr = get_current_brightness()
+    if arg.startswith("+"):
+        diff = int(arg[1:])
+        set_brightness(curr + diff)
+    elif arg.startswith("-"):
+        diff = int(arg[1:])
+        set_brightness(curr - diff)
+    else:
+        try:
+            set_brightness(int(arg))
+        except ValueError:
+            pass
+
+if __name__ == "__main__":
+    main()

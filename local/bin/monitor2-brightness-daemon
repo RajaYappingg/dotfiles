@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+import cairo
+
+BRIGHTNESS_FILE = "/tmp/.monitor2_brightness"
+
+def get_saved_brightness():
+    try:
+        if os.path.exists(BRIGHTNESS_FILE):
+            with open(BRIGHTNESS_FILE, "r") as f:
+                val = int(float(f.read().strip()))
+                return max(10, min(100, val))
+    except Exception:
+        pass
+    return 100
+
+class Monitor2Dimmer(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "monitor2-brightness")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        
+        # Target second monitor (MSI G255F / HDMI-A-1)
+        display = Gdk.Display.get_default()
+        target_mon = None
+        n = display.get_n_monitors()
+        for i in range(n):
+            m = display.get_monitor(i)
+            model = m.get_model() or ""
+            manuf = m.get_manufacturer() or ""
+            if "MSI" in model or "G255F" in model or "Microstep" in manuf or i == 1:
+                target_mon = m
+                break
+        
+        if target_mon:
+            GtkLayerShell.set_monitor(self, target_mon)
+
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+
+        GtkLayerShell.set_exclusive_zone(self, -1)
+
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+        self.set_app_paintable(True)
+
+        # 100% Click-through
+        self.input_shape_combine_region(cairo.Region())
+
+        self.brightness = get_saved_brightness()
+
+        self.da = Gtk.DrawingArea()
+        self.da.connect("draw", self.on_draw)
+        self.add(self.da)
+
+        self.show_all()
+
+        GLib.timeout_add(50, self.check_file_update)
+
+    def on_draw(self, widget, cr):
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+
+        # At 100% -> alpha 0.0 (completely clear)
+        # At 10%  -> alpha 0.76 (dimmed)
+        alpha = max(0.0, min(0.85, (100.0 - self.brightness) / 100.0 * 0.85))
+        cr.set_source_rgba(0.0, 0.0, 0.0, alpha)
+        cr.rectangle(0, 0, w, h)
+        cr.fill()
+        return False
+
+    def check_file_update(self):
+        val = get_saved_brightness()
+        if val != self.brightness:
+            self.brightness = val
+            self.da.queue_draw()
+        return True
+
+def main():
+    lock_file = "/tmp/.monitor2_brightness_daemon.lock"
+    try:
+        import fcntl
+        fp = open(lock_file, "w")
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except Exception:
+        try:
+            res = subprocess.run(["pgrep", "-f", "monitor2-brightness-daemon"], capture_output=True, text=True)
+            for pid_str in res.stdout.strip().split():
+                if int(pid_str) != os.getpid():
+                    os.kill(int(pid_str), 9)
+        except Exception:
+            pass
+
+    app = Monitor2Dimmer()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

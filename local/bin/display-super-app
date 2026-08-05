@@ -1,0 +1,452 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import json
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gtk, Gdk, GLib
+
+CSS = b"""
+* {
+    font-family: "JetBrains Mono", "Inter", sans-serif;
+    outline: none;
+    box-shadow: none;
+}
+
+window.superapp-window {
+    background-color: #0b0f19;
+    color: #f8fafc;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 18px;
+}
+
+.header-box {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 16px 20px;
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+}
+
+.header-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+.header-sub {
+    font-size: 12px;
+    color: #38bdf8;
+}
+
+.card-box {
+    background-color: #172033;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.card-badge {
+    background-color: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.preset-btn {
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.preset-btn:hover {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+.hz-btn {
+    background-color: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.hz-btn:hover {
+    background-color: #1e293b;
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+.hz-btn.active {
+    background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+.quick-bright-btn {
+    background-color: #0f172a;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.quick-bright-btn:hover {
+    background-color: #1e293b;
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+scale trough {
+    background-color: #0f172a;
+    border-radius: 6px;
+    min-height: 8px;
+}
+
+scale highlight {
+    background: linear-gradient(90deg, #38bdf8 0%, #818cf8 100%);
+    border-radius: 6px;
+}
+
+scale slider {
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+}
+
+.close-btn {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #f1f5f9;
+    border-radius: 8px;
+    padding: 6px 12px;
+    border: none;
+    font-weight: bold;
+}
+
+.close-btn:hover {
+    background-color: #ef4444;
+    color: #ffffff;
+}
+"""
+
+class DisplaySuperApp(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Display Control Super App")
+        self.set_name("superapp-window")
+        self.set_default_size(780, 560)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_wmclass("floating_sys", "floating_sys")
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # 1. Header
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header.get_style_context().add_class("header-box")
+
+        title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_title = Gtk.Label(label="🖥️ DISPLAY CONTROL SUPER APP", xalign=0)
+        lbl_title.get_style_context().add_class("header-title")
+        lbl_sub = Gtk.Label(label="Pusat Kontrol Refresh Rate (Hz) & Kecerahan Layar Hyprland", xalign=0)
+        lbl_sub.get_style_context().add_class("header-sub")
+        title_vbox.pack_start(lbl_title, False, False, 0)
+        title_vbox.pack_start(lbl_sub, False, False, 0)
+
+        header.pack_start(title_vbox, True, True, 0)
+
+        btn_close = Gtk.Button(label=" ✕ ")
+        btn_close.get_style_context().add_class("close-btn")
+        btn_close.connect("clicked", lambda b: self.close())
+        header.pack_start(btn_close, False, False, 0)
+
+        main_box.pack_start(header, False, False, 0)
+
+        # Scrolled Container
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        content_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        content_vbox.set_margin_top(16)
+        content_vbox.set_margin_bottom(16)
+        content_vbox.set_margin_left(20)
+        content_vbox.set_margin_right(20)
+        scrolled.add(content_vbox)
+        main_box.pack_start(scrolled, True, True, 0)
+
+        # 2. Quick Presets Section
+        preset_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        preset_card.get_style_context().add_class("card-box")
+
+        lbl_p_title = Gtk.Label(label="🚀 Mode Presets (1-Click Settings)", xalign=0)
+        lbl_p_title.get_style_context().add_class("card-title")
+        preset_card.pack_start(lbl_p_title, False, False, 0)
+
+        preset_grid = Gtk.Grid()
+        preset_grid.set_column_spacing(10)
+        preset_grid.set_row_spacing(8)
+        preset_grid.set_column_homogeneous(True)
+
+        presets = [
+            ("🎮 Gaming Ultra", "Mon 2: 180Hz | 100%\nMon 1: 144Hz | 100%", self.apply_preset_gaming),
+            ("💼 Work / Balanced", "Mon 2: 144Hz | 75%\nMon 1: 144Hz | 75%", self.apply_preset_work),
+            ("🔋 Battery Eco", "Mon 2: 60Hz | 50%\nMon 1: 60Hz | 40%", self.apply_preset_eco),
+            ("🌙 Night Mode", "Mon 2: 60Hz | 20%\nMon 1: 60Hz | 20%", self.apply_preset_night),
+        ]
+
+        for idx, (p_title, p_desc, p_func) in enumerate(presets):
+            btn = Gtk.Button(label=f"{p_title}\n{p_desc}")
+            btn.get_style_context().add_class("preset-btn")
+            btn.connect("clicked", lambda b, f=p_func: f())
+            preset_grid.attach(btn, idx % 2, idx // 2, 1, 1)
+
+        preset_card.pack_start(preset_grid, False, False, 0)
+        content_vbox.pack_start(preset_card, False, False, 0)
+
+        # 3. Monitor 2 Control Card (MSI G255F - HDMI-A-1)
+        mon2_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        mon2_card.get_style_context().add_class("card-box")
+
+        m2_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_m2 = Gtk.Label(label="🖥️ MONITOR 2 (MSI G255F - HDMI-A-1)", xalign=0)
+        lbl_m2.get_style_context().add_class("card-title")
+        badge_m2 = Gtk.Label(label="EXTERNAL DISPLAY")
+        badge_m2.get_style_context().add_class("card-badge")
+        m2_header.pack_start(lbl_m2, True, True, 0)
+        m2_header.pack_start(badge_m2, False, False, 0)
+        mon2_card.pack_start(m2_header, False, False, 0)
+
+        # Monitor 2 Refresh Rate (Hz)
+        mon2_card.pack_start(Gtk.Label(label="⚡ Refresh Rate (Hz):", xalign=0), False, False, 0)
+        m2_hz_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        m2_hz_box.set_homogeneous(True)
+
+        self.m2_rates = [60, 120, 144, 165, 180]
+        self.m2_hz_buttons = {}
+        curr_m2_hz = self.get_hz("HDMI-A-1")
+
+        for r in self.m2_rates:
+            btn = Gtk.Button(label=f"{r}Hz")
+            btn.get_style_context().add_class("hz-btn")
+            if r == curr_m2_hz:
+                btn.get_style_context().add_class("active")
+            btn.connect("clicked", lambda b, rate=r: self.set_m2_hz(rate))
+            m2_hz_box.pack_start(btn, True, True, 0)
+            self.m2_hz_buttons[r] = btn
+
+        mon2_card.pack_start(m2_hz_box, False, False, 0)
+
+        # Monitor 2 Brightness Slider
+        mon2_card.pack_start(Gtk.Label(label="🔆 Kecerahan Screen:", xalign=0), False, False, 0)
+        m2_b_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        curr_m2_b = self.get_m2_brightness()
+        self.m2_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 10, 100, 5)
+        self.m2_scale.set_value(curr_m2_b)
+        self.m2_scale.set_draw_value(False)
+        self.m2_scale.connect("value-changed", self.on_m2_scale_changed)
+        m2_b_box.pack_start(self.m2_scale, True, True, 0)
+
+        self.lbl_m2_b_val = Gtk.Label(label=f"{curr_m2_b}%")
+        self.lbl_m2_b_val.set_size_request(45, -1)
+        self.lbl_m2_b_val.get_style_context().add_class("card-title")
+        m2_b_box.pack_start(self.lbl_m2_b_val, False, False, 0)
+
+        for p in [25, 50, 75, 100]:
+            btn = Gtk.Button(label=f"{p}%")
+            btn.get_style_context().add_class("quick-bright-btn")
+            btn.connect("clicked", lambda b, val=p: self.m2_scale.set_value(val))
+            m2_b_box.pack_start(btn, False, False, 0)
+
+        mon2_card.pack_start(m2_b_box, False, False, 0)
+        content_vbox.pack_start(mon2_card, False, False, 0)
+
+        # 4. Monitor 1 Control Card (BOE Laptop - eDP-1)
+        mon1_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        mon1_card.get_style_context().add_class("card-box")
+
+        m1_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_m1 = Gtk.Label(label="💻 MONITOR 1 (Laptop BOE - eDP-1)", xalign=0)
+        lbl_m1.get_style_context().add_class("card-title")
+        badge_m1 = Gtk.Label(label="PRIMARY LAPTOP")
+        badge_m1.get_style_context().add_class("card-badge")
+        m1_header.pack_start(lbl_m1, True, True, 0)
+        m1_header.pack_start(badge_m1, False, False, 0)
+        mon1_card.pack_start(m1_header, False, False, 0)
+
+        # Monitor 1 Refresh Rate (Hz)
+        mon1_card.pack_start(Gtk.Label(label="⚡ Refresh Rate (Hz):", xalign=0), False, False, 0)
+        m1_hz_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        m1_hz_box.set_homogeneous(True)
+
+        self.m1_rates = [60, 144]
+        self.m1_hz_buttons = {}
+        curr_m1_hz = self.get_hz("eDP-1")
+
+        for r in self.m1_rates:
+            btn = Gtk.Button(label=f"{r}Hz")
+            btn.get_style_context().add_class("hz-btn")
+            if r == curr_m1_hz:
+                btn.get_style_context().add_class("active")
+            btn.connect("clicked", lambda b, rate=r: self.set_m1_hz(rate))
+            m1_hz_box.pack_start(btn, True, True, 0)
+            self.m1_hz_buttons[r] = btn
+
+        mon1_card.pack_start(m1_hz_box, False, False, 0)
+
+        # Monitor 1 Brightness Slider
+        mon1_card.pack_start(Gtk.Label(label="🔆 Kecerahan Screen:", xalign=0), False, False, 0)
+        m1_b_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        curr_m1_b = self.get_m1_brightness()
+        self.m1_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 10, 100, 5)
+        self.m1_scale.set_value(curr_m1_b)
+        self.m1_scale.set_draw_value(False)
+        self.m1_scale.connect("value-changed", self.on_m1_scale_changed)
+        m1_b_box.pack_start(self.m1_scale, True, True, 0)
+
+        self.lbl_m1_b_val = Gtk.Label(label=f"{curr_m1_b}%")
+        self.lbl_m1_b_val.set_size_request(45, -1)
+        self.lbl_m1_b_val.get_style_context().add_class("card-title")
+        m1_b_box.pack_start(self.lbl_m1_b_val, False, False, 0)
+
+        for p in [25, 50, 75, 100]:
+            btn = Gtk.Button(label=f"{p}%")
+            btn.get_style_context().add_class("quick-bright-btn")
+            btn.connect("clicked", lambda b, val=p: self.m1_scale.set_value(val))
+            m1_b_box.pack_start(btn, False, False, 0)
+
+        mon1_card.pack_start(m1_b_box, False, False, 0)
+        content_vbox.pack_start(mon1_card, False, False, 0)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("destroy", Gtk.main_quit)
+
+    def get_hz(self, mon_name):
+        try:
+            res = subprocess.run(["hyprctl", "-j", "monitors"], capture_output=True, text=True)
+            monitors = json.loads(res.stdout)
+            for m in monitors:
+                if m.get("name") == mon_name:
+                    return round(m.get("refreshRate", 60))
+        except Exception:
+            pass
+        return 60
+
+    def get_m2_brightness(self):
+        try:
+            if os.path.exists("/tmp/.monitor2_brightness"):
+                with open("/tmp/.monitor2_brightness", "r") as f:
+                    return int(float(f.read().strip()))
+        except Exception:
+            pass
+        return 100
+
+    def get_m1_brightness(self):
+        try:
+            res = subprocess.run(["brightnessctl", "g"], capture_output=True, text=True)
+            max_b = subprocess.run(["brightnessctl", "m"], capture_output=True, text=True)
+            curr = int(res.stdout.strip())
+            max_val = int(max_b.stdout.strip())
+            return int((curr / max_val) * 100)
+        except Exception:
+            pass
+        return 100
+
+    def set_m2_hz(self, rate):
+        subprocess.run(["/home/zaki/.local/bin/monitor2-hz", str(rate)])
+        for r, btn in self.m2_hz_buttons.items():
+            if r == rate:
+                btn.get_style_context().add_class("active")
+            else:
+                btn.get_style_context().remove_class("active")
+
+    def set_m1_hz(self, rate):
+        cmd = f"hl.monitor({{ output = 'eDP-1', mode = '1920x1080@{rate}', position = '0x0', scale = 1 }})"
+        subprocess.run(["hyprctl", "eval", cmd], capture_output=True)
+        subprocess.run(["notify-send", "-r", "9913", "-i", "video-display", "Monitor 1 Laptop", f"Refresh rate: {rate}Hz"])
+        for r, btn in self.m1_hz_buttons.items():
+            if r == rate:
+                btn.get_style_context().add_class("active")
+            else:
+                btn.get_style_context().remove_class("active")
+
+    def on_m2_scale_changed(self, scale):
+        val = int(scale.get_value())
+        self.lbl_m2_b_val.set_text(f"{val}%")
+        subprocess.run(["/home/zaki/.local/bin/monitor2-brightness", str(val)])
+
+    def on_m1_scale_changed(self, scale):
+        val = int(scale.get_value())
+        self.lbl_m1_b_val.set_text(f"{val}%")
+        subprocess.run(["/home/zaki/.local/bin/change-brightness", str(val)])
+
+    def apply_preset_gaming(self):
+        self.set_m2_hz(180)
+        self.set_m1_hz(144)
+        self.m2_scale.set_value(100)
+        self.m1_scale.set_value(100)
+        subprocess.run(["notify-send", "-r", "9914", "-i", "input-gaming", "Preset Applied", "🎮 Gaming Ultra Mode Activated!"])
+
+    def apply_preset_work(self):
+        self.set_m2_hz(144)
+        self.set_m1_hz(144)
+        self.m2_scale.set_value(75)
+        self.m1_scale.set_value(75)
+        subprocess.run(["notify-send", "-r", "9914", "-i", "preferences-system", "Preset Applied", "💼 Work / Balanced Mode Activated!"])
+
+    def apply_preset_eco(self):
+        self.set_m2_hz(60)
+        self.set_m1_hz(60)
+        self.m2_scale.set_value(50)
+        self.m1_scale.set_value(40)
+        subprocess.run(["notify-send", "-r", "9914", "-i", "battery-good", "Preset Applied", "🔋 Battery Eco Mode Activated!"])
+
+    def apply_preset_night(self):
+        self.set_m2_hz(60)
+        self.set_m1_hz(60)
+        self.m2_scale.set_value(20)
+        self.m1_scale.set_value(20)
+        subprocess.run(["notify-send", "-r", "9914", "-i", "night-light", "Preset Applied", "🌙 Night Mode Activated!"])
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+
+def main():
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(),
+        css_provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+
+    app = DisplaySuperApp()
+    app.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()
