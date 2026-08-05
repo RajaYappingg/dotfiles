@@ -924,7 +924,7 @@ class NotificationCenterDashboard(Gtk.Window):
 
                 btn_clear_app = Gtk.Button(label="󰅖")
                 btn_clear_app.get_style_context().add_class("icon-mini-btn")
-                btn_clear_app.connect("clicked", lambda w: self.on_clear_all())
+                btn_clear_app.connect("clicked", lambda w, group_items=items: self.on_clear_app_group(group_items))
 
                 app_hdr.pack_start(lbl_app, True, True, 0)
                 app_hdr.pack_start(btn_clear_app, False, False, 0)
@@ -971,9 +971,14 @@ class NotificationCenterDashboard(Gtk.Window):
             spacer = Gtk.Label(label="")
             top_bar.pack_start(spacer, True, True, 0)
 
+        notif_id = item.get("id", {}).get("data")
+
         btn_close_card = Gtk.Button(label="󰅖")
         btn_close_card.get_style_context().add_class("icon-mini-btn")
-        btn_close_card.connect("clicked", lambda w: self.on_clear_all())
+        if notif_id is not None:
+            btn_close_card.connect("clicked", lambda w, nid=notif_id: self.on_clear_single(nid))
+        else:
+            btn_close_card.connect("clicked", lambda w: self.on_clear_all())
         top_bar.pack_start(btn_close_card, False, False, 0)
 
         card.pack_start(top_bar, False, False, 0)
@@ -1019,6 +1024,25 @@ class NotificationCenterDashboard(Gtk.Window):
             subprocess.run(["dunstctl", "action", str(key)])
         except Exception:
             pass
+        self.load_notifications()
+
+    def on_clear_single(self, notif_id):
+        try:
+            subprocess.run(["dunstctl", "history-rm", str(notif_id)])
+            subprocess.run(["dunstctl", "close", str(notif_id)])
+        except Exception:
+            pass
+        self.load_notifications()
+
+    def on_clear_app_group(self, items):
+        for item in items:
+            notif_id = item.get("id", {}).get("data")
+            if notif_id is not None:
+                try:
+                    subprocess.run(["dunstctl", "history-rm", str(notif_id)])
+                    subprocess.run(["dunstctl", "close", str(notif_id)])
+                except Exception:
+                    pass
         self.load_notifications()
 
     def on_clear_all(self):
