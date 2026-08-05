@@ -307,16 +307,15 @@ class OrbitClockArea(Gtk.Overlay):
     def __init__(self):
         super().__init__()
         self.da = Gtk.DrawingArea()
-        self.da.set_size_request(360, 270)
+        self.da.set_size_request(380, 270)
         self.da.connect("draw", self.on_draw_orbit)
         self.add(self.da)
 
-        # Content Box overlay on top of orbit drawing
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        content.set_valign(Gtk.Align.CENTER)
-        content.set_halign(Gtk.Align.CENTER)
+        # Center Clock Box (HH:MM + :SS & Date ONLY)
+        center_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        center_box.set_valign(Gtk.Align.CENTER)
+        center_box.set_halign(Gtk.Align.CENTER)
 
-        # Giant Clock Box (HH:MM + :SS)
         clock_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         clock_row.set_halign(Gtk.Align.CENTER)
 
@@ -334,10 +333,17 @@ class OrbitClockArea(Gtk.Overlay):
         self.lbl_date_sub = Gtk.Label(label="Friday, May 08")
         self.lbl_date_sub.get_style_context().add_class("clock-date-sub")
 
-        # Weather Capsule Pill Widget
-        capsule = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        capsule.get_style_context().add_class("weather-capsule")
-        capsule.set_halign(Gtk.Align.CENTER)
+        center_box.pack_start(clock_row, False, False, 0)
+        center_box.pack_start(self.lbl_date_sub, False, False, 0)
+        self.add_overlay(center_box)
+
+        # Fixed Overlay Container for Orbiting Weather Capsule Card
+        self.fixed = Gtk.Fixed()
+        self.add_overlay(self.fixed)
+
+        # Weather Capsule Pill Widget (Orbiting Node)
+        self.capsule = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        self.capsule.get_style_context().add_class("weather-capsule")
 
         self.lbl_cap_time = Gtk.Label(label="00:00")
         self.lbl_cap_time.get_style_context().add_class("capsule-time")
@@ -348,40 +354,61 @@ class OrbitClockArea(Gtk.Overlay):
         self.lbl_cap_temp = Gtk.Label(label="0.0°")
         self.lbl_cap_temp.get_style_context().add_class("capsule-temp")
 
-        capsule.pack_start(self.lbl_cap_time, False, False, 0)
-        capsule.pack_start(self.lbl_cap_icon, False, False, 0)
-        capsule.pack_start(self.lbl_cap_temp, False, False, 0)
+        self.capsule.pack_start(self.lbl_cap_time, False, False, 0)
+        self.capsule.pack_start(self.lbl_cap_icon, False, False, 0)
+        self.capsule.pack_start(self.lbl_cap_temp, False, False, 0)
 
-        content.pack_start(clock_row, False, False, 0)
-        content.pack_start(self.lbl_date_sub, False, False, 0)
-        content.pack_start(capsule, False, False, 0)
-
-        self.add_overlay(content)
+        self.fixed.put(self.capsule, 0, 0)
 
         # 60 FPS Orbit Rotation Animation
         GLib.timeout_add(16, self.animate_orbit_frame)
 
     def animate_orbit_frame(self):
+        w = self.da.get_allocated_width()
+        h = self.da.get_allocated_height()
+        if w > 1 and h > 1:
+            xc = w / 2.0
+            yc = h / 2.0
+
+            rx = 108.0 * 1.38
+            ry = 108.0 * 0.70
+
+            # Rotation angle matching continuous orbit rotation
+            angle = (time.time() * 0.12) % (2 * math.pi)
+            rot = math.pi / 2.0 + angle
+
+            px = xc + rx * math.cos(rot)
+            py = yc + ry * math.sin(rot)
+
+            cap_w = self.capsule.get_allocated_width()
+            cap_h = self.capsule.get_allocated_height()
+            if cap_w < 5: cap_w = 64
+            if cap_h < 5: cap_h = 70
+
+            fx = int(px - cap_w / 2.0)
+            fy = int(py - cap_h / 2.0)
+
+            self.fixed.move(self.capsule, fx, fy)
+
         self.da.queue_draw()
         return True
 
     def on_draw_orbit(self, widget, cr):
         w = widget.get_allocated_width()
         h = widget.get_allocated_height()
-        xc, yc = w / 2, h / 2 - 12
+        xc, yc = w / 2.0, h / 2.0
 
-        # Draw smooth animated rotating dashed ellipse orbit ring (Synchronized with real-time earth rotation)
+        # Draw smooth animated rotating dashed ellipse orbit ring
         cr.save()
         cr.translate(xc, yc)
-        cr.scale(1.42, 0.72)
+        cr.scale(1.38, 0.70)
 
-        # Rotate continuously according to real-time (0.12 rad/sec)
         angle = (time.time() * 0.12) % (2 * math.pi)
         cr.rotate(angle)
 
         cr.set_dash([5.0, 7.0])
         cr.set_line_width(2.0)
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.28)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.35)
         cr.arc(0, 0, 108, 0, 2 * math.pi)
         cr.stroke()
         cr.restore()
