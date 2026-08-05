@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Dunst Notification Sound Handler
+
+SOUND_FILE="$HOME/.local/share/sounds/notification.wav"
+
+APP_NAME="$1"
+SUMMARY="$2"
+BODY="$3"
+
+# Skip repeated sound for live timer/countdown updates
+if [[ "$BODY" == *"Sisa Waktu:"* || "$BODY" == *"Sisa waktu:"* ]]; then
+    exit 0
+fi
+
+if [ -f "$SOUND_FILE" ]; then
+    paplay "$SOUND_FILE" 2>/dev/null || pw-play "$SOUND_FILE" 2>/dev/null &
+fi

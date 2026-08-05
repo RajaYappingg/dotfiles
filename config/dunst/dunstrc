@@ -8,6 +8,7 @@
     scale = 0
     notification_limit = 5
     history_length = 50
+    script = /home/zaki/.local/bin/dunst-sound
 
     progress_bar = true
     progress_bar_height = 6
