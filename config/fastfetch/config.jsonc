@@ -9,10 +9,10 @@
     }
   },
   "display": {
-    "separator": " ➜  ",
+    "separator": " \u279c  ",
     "color": {
-      "keys": "cyan",
-      "title": "cyan"
+      "keys": "38;2;204;136;112",
+      "title": "38;2;204;136;112"
     }
   },
   "modules": [

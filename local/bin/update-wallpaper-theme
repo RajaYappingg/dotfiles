@@ -139,20 +139,7 @@ def extract_palette(image_path):
     bg_dark_hex = f"#{bg_r:02x}{bg_g:02x}{bg_b:02x}"
     bg_pill_hex = f"#{pill_r:02x}{pill_g:02x}{pill_b:02x}"
 
-    h_deg = h_val * 360
-    fastfetch_key = "cyan"
-    if 340 <= h_deg or h_deg < 20:
-        fastfetch_key = "red"
-    elif 20 <= h_deg < 50:
-        fastfetch_key = "yellow"
-    elif 50 <= h_deg < 160:
-        fastfetch_key = "green"
-    elif 160 <= h_deg < 200:
-        fastfetch_key = "cyan"
-    elif 200 <= h_deg < 270:
-        fastfetch_key = "blue"
-    elif 270 <= h_deg < 340:
-        fastfetch_key = "magenta"
+    fastfetch_rgb = f"38;2;{primary_rgb[0]};{primary_rgb[1]};{primary_rgb[2]}"
 
     return {
         'primary': primary_hex,
@@ -161,8 +148,8 @@ def extract_palette(image_path):
         'bg_pill': bg_pill_hex,
         'border': primary_hex,
         'text': '#ffffff',
-        'fastfetch_key': fastfetch_key,
-        'fastfetch_title': fastfetch_key
+        'fastfetch_key': fastfetch_rgb,
+        'fastfetch_title': fastfetch_rgb
     }
 
 def update_waybar_colors(palette):
