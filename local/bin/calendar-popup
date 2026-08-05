@@ -388,27 +388,10 @@ class OrbitClockArea(Gtk.Overlay):
             icon_symbol = "󰽤"  # Moon Nerd Font icon
             icon_rgb = (0.75, 0.88, 1.0)  # Cool Lunar Blue
 
-        # Outer Glow Circle Node
-        cr.set_source_rgba(icon_rgb[0], icon_rgb[1], icon_rgb[2], 0.22)
-        cr.arc(px, py, 16.0, 0, 2 * math.pi)
-        cr.fill()
-
-        # Inner Pill Circle Node (Dark Glassmorphic Background)
-        bg_r, bg_g, bg_b = hex_to_rgb(BG_PILL_HEX)
-        cr.set_source_rgba(bg_r, bg_g, bg_b, 0.90)
-        cr.arc(px, py, 13.0, 0, 2 * math.pi)
-        cr.fill_preserve()
-
-        # Border Accent Ring
-        pr, pg, pb = PRIMARY_RGB
-        cr.set_source_rgba(pr, pg, pb, 0.70)
-        cr.set_line_width(1.5)
-        cr.stroke()
-
-        # Render Sun / Moon Nerd Font Icon centered inside the node
+        # Render pure Sun / Moon Nerd Font Icon floating directly along the orbit (100% transparent background)
         cr.set_source_rgba(icon_rgb[0], icon_rgb[1], icon_rgb[2], 0.98)
         cr.select_font_face("JetBrainsMono Nerd Font", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(15)
+        cr.set_font_size(18)
 
         ext = cr.text_extents(icon_symbol)
         cr.move_to(px - ext.width / 2.0 - ext.x_bearing, py - ext.height / 2.0 - ext.y_bearing)
