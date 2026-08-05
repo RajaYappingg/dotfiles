@@ -126,6 +126,12 @@ CSS_TEMPLATE = f"""
     box-shadow: none;
 }}
 
+button {{
+    background-image: none;
+    border-image: none;
+    box-shadow: none;
+}}
+
 window.cal-window {{
     background-color: transparent;
 }}
@@ -138,11 +144,12 @@ window.cal-window {{
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
 }}
 
-/* Left Calendar Header */
-.cal-nav-btn {{
-    background-color: rgba(255, 255, 255, 0.08);
+/* Left Calendar Header Navigation Buttons */
+button.cal-nav-btn {{
+    background-image: none;
+    background-color: {hex_to_rgba_str(BG_PILL_HEX, 0.70)};
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid {hex_to_rgba_str(PRIMARY_HEX, 0.40)};
     border-radius: 12px;
     padding: 4px 12px;
     font-size: 15px;
@@ -150,10 +157,12 @@ window.cal-window {{
     transition: all 0.2s ease;
 }}
 
-.cal-nav-btn:hover {{
+button.cal-nav-btn:hover {{
+    background-image: none;
     background-color: {PRIMARY_HEX};
     border-color: {PRIMARY_HEX};
     color: #ffffff;
+    box-shadow: 0 4px 16px {hex_to_rgba_str(PRIMARY_HEX, 0.60)};
 }}
 
 .cal-month-title {{
@@ -174,13 +183,23 @@ window.cal-window {{
     color: #ff5555;
 }}
 
-.day-num {{
+button.day-num {{
+    background-image: none;
+    background-color: transparent;
+    border: none;
     font-size: 15px;
     font-weight: 700;
     color: #ffffff;
     min-width: 36px;
     min-height: 36px;
     border-radius: 12px;
+    transition: all 0.15s ease;
+}}
+
+button.day-num:hover {{
+    background-image: none;
+    background-color: {hex_to_rgba_str(PRIMARY_HEX, 0.25)};
+    color: #ffffff;
 }}
 
 .day-red {{
@@ -193,15 +212,17 @@ window.cal-window {{
     font-weight: 500;
 }}
 
-.day-today-pill {{
-    background-color: #ffffff;
-    color: #0f172a;
+button.day-today-pill {{
+    background-image: none;
+    background-color: {PRIMARY_HEX};
+    color: #ffffff;
     font-weight: 900;
     border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.50);
+    box-shadow: 0 4px 16px {hex_to_rgba_str(PRIMARY_HEX, 0.65)};
 }}
 
-.day-today-pill.day-red {{
+button.day-today-pill.day-red {{
+    background-image: none;
     background-color: #ff5555;
     color: #ffffff;
     box-shadow: 0 4px 16px rgba(255, 85, 85, 0.60);
