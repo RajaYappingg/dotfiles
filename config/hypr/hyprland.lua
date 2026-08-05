@@ -470,7 +470,7 @@ hl.window_rule({
     match = { class = "floating_vol" },
 
     float   = true,
-    size    = "580 300",
+    size    = "420 270",
     center  = true,
     opacity = "0.85 0.85",
 })

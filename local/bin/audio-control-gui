@@ -10,6 +10,9 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
+GLib.set_prgname("floating_vol")
+GLib.set_application_name("floating_vol")
+
 CSS = b"""
 * {
     font-family: "Inter", "JetBrains Mono", sans-serif;
@@ -18,14 +21,14 @@ CSS = b"""
 }
 
 window.volumemixer-window {
-    background-color: #161a23;
+    background-color: rgba(18, 22, 32, 0.72);
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 16px;
 }
 
 .header-title {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: #ffffff;
 }
@@ -34,13 +37,13 @@ window.volumemixer-window {
     background: transparent;
     color: #cbd5e1;
     border: none;
-    font-size: 18px;
-    padding: 4px 8px;
+    font-size: 16px;
+    padding: 2px 6px;
     border-radius: 8px;
 }
 
 .header-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.15);
     color: #ffffff;
 }
 
@@ -51,13 +54,13 @@ window.volumemixer-window {
 }
 
 .vol-num {
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 600;
     color: #94a3b8;
 }
 
 scale trough {
-    background-color: #2a3243;
+    background-color: rgba(255, 255, 255, 0.12);
     border-radius: 4px;
     min-height: 4px;
 }
@@ -77,10 +80,10 @@ scale slider {
 }
 
 .divider-line {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.12);
     min-height: 1px;
     margin-top: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .app-name {
@@ -94,15 +97,21 @@ class ExactVolumeMixer(Gtk.Window):
     def __init__(self):
         super().__init__(title="Volume Mixer")
         self.set_name("volumemixer-window")
-        self.set_default_size(380, 260)
+        self.set_default_size(380, 240)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_wmclass("floating_vol", "floating_vol")
+
+        # Enable RGBA Transparency for Glassmorphism
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+        self.set_app_paintable(True)
 
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        main_vbox.set_margin_top(16)
-        main_vbox.set_margin_bottom(16)
-        main_vbox.set_margin_left(18)
-        main_vbox.set_margin_right(18)
+        main_vbox.set_margin_top(14)
+        main_vbox.set_margin_bottom(14)
+        main_vbox.set_margin_left(16)
+        main_vbox.set_margin_right(16)
         self.add(main_vbox)
 
         # 1. Header Row
@@ -122,14 +131,14 @@ class ExactVolumeMixer(Gtk.Window):
 
         # 2. Master Output Volume Row
         master_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        master_row.set_margin_top(12)
+        master_row.set_margin_top(10)
 
         self.lbl_master_icon = Gtk.Label(label="🔊")
         master_row.pack_start(self.lbl_master_icon, False, False, 0)
 
         self.lbl_master_name = Gtk.Label(label="Headphones", xalign=0)
         self.lbl_master_name.get_style_context().add_class("device-name")
-        self.lbl_master_name.set_size_request(110, -1)
+        self.lbl_master_name.set_size_request(100, -1)
         master_row.pack_start(self.lbl_master_name, False, False, 0)
 
         self.scale_master = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
@@ -139,7 +148,7 @@ class ExactVolumeMixer(Gtk.Window):
 
         self.lbl_master_val = Gtk.Label(label="100", xalign=1)
         self.lbl_master_val.get_style_context().add_class("vol-num")
-        self.lbl_master_val.set_size_request(30, -1)
+        self.lbl_master_val.set_size_request(28, -1)
         master_row.pack_start(self.lbl_master_val, False, False, 0)
 
         main_vbox.pack_start(master_row, False, False, 0)
@@ -152,9 +161,9 @@ class ExactVolumeMixer(Gtk.Window):
         # 3. App Streams List Container
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.apps_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.apps_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         scrolled.add(self.apps_vbox)
-        main_box.pack_start(scrolled, True, True, 0)
+        main_vbox.pack_start(scrolled, True, True, 0)
 
         self.connect("key-press-event", self.on_key_press)
         self.connect("destroy", Gtk.main_quit)
@@ -248,7 +257,7 @@ class ExactVolumeMixer(Gtk.Window):
                 # App Name Label
                 lbl_app = Gtk.Label(label=app_name, xalign=0)
                 lbl_app.get_style_context().add_class("app-name")
-                lbl_app.set_size_request(110, -1)
+                lbl_app.set_size_request(100, -1)
                 row_box.pack_start(lbl_app, False, False, 0)
 
                 # App Slider
@@ -261,7 +270,7 @@ class ExactVolumeMixer(Gtk.Window):
                 # App Vol Number Label
                 lbl_num = Gtk.Label(label=str(vol_val), xalign=1)
                 lbl_num.get_style_context().add_class("vol-num")
-                lbl_num.set_size_request(30, -1)
+                lbl_num.set_size_request(28, -1)
                 row_box.pack_start(lbl_num, False, False, 0)
 
                 # Attach label reference to scale widget for real-time updates
@@ -290,10 +299,10 @@ class ExactVolumeMixer(Gtk.Window):
 
         theme = Gtk.IconTheme.get_default()
         if theme.has_icon(icon_name):
-            pixbuf = theme.load_icon(icon_name, 22, Gtk.IconLookupFlags.FORCE_SIZE)
+            pixbuf = theme.load_icon(icon_name, 20, Gtk.IconLookupFlags.FORCE_SIZE)
             return Gtk.Image.new_from_pixbuf(pixbuf)
 
-        # Fallback colored emoji/icon label
+        # Fallback emoji icon
         emoji = "🎵"
         if "discord" in name_lower:
             emoji = "💬"
@@ -303,7 +312,7 @@ class ExactVolumeMixer(Gtk.Window):
             emoji = "🦊"
 
         lbl = Gtk.Label(label=emoji)
-        lbl.set_size_request(22, 22)
+        lbl.set_size_request(20, 20)
         return lbl
 
     def on_master_scale_changed(self, scale):
@@ -323,7 +332,6 @@ class ExactVolumeMixer(Gtk.Window):
             return
         def_sink = self.get_default_sink()
         
-        # Find next sink
         next_sink = sinks[0].get("name")
         for idx, s in enumerate(sinks):
             if s.get("name") == def_sink:
