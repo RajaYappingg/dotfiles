@@ -373,12 +373,17 @@ class OrbitClockArea(Gtk.Overlay):
             rx = 108.0 * 1.38
             ry = 108.0 * 0.70
 
-            # Rotation angle matching continuous orbit rotation
-            angle = (time.time() * 0.12) % (2 * math.pi)
-            rot = math.pi / 2.0 + angle
+            # Real-time 12-hour analog clock hand position
+            now = time.localtime()
+            hours = now.tm_hour % 12
+            minutes = now.tm_min
+            seconds = now.tm_sec
 
-            px = xc + rx * math.cos(rot)
-            py = yc + ry * math.sin(rot)
+            total_hours = hours + (minutes / 60.0) + (seconds / 3600.0)
+            angle = (total_hours / 12.0) * (2 * math.pi) - (math.pi / 2.0)
+
+            px = xc + rx * math.cos(angle)
+            py = yc + ry * math.sin(angle)
 
             cap_w = self.capsule.get_allocated_width()
             cap_h = self.capsule.get_allocated_height()
@@ -398,13 +403,10 @@ class OrbitClockArea(Gtk.Overlay):
         h = widget.get_allocated_height()
         xc, yc = w / 2.0, h / 2.0
 
-        # Draw smooth animated rotating dashed ellipse orbit ring
+        # Draw elegant dashed orbital ellipse ring (12-hour clock orbit face)
         cr.save()
         cr.translate(xc, yc)
         cr.scale(1.38, 0.70)
-
-        angle = (time.time() * 0.12) % (2 * math.pi)
-        cr.rotate(angle)
 
         cr.set_dash([5.0, 7.0])
         cr.set_line_width(2.0)
