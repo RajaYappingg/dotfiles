@@ -642,7 +642,6 @@ class AestheticCalendarDashboard(Gtk.Window):
         self.orbit_clock.lbl_clock_hm.set_text(time.strftime("%H:%M", t))
         self.orbit_clock.lbl_clock_sec.set_text(time.strftime(":%S", t))
         self.orbit_clock.lbl_date_sub.set_text(time.strftime("%A, %b %d", t))
-        self.orbit_clock.lbl_cap_time.set_text(time.strftime("%H:%M", t))
         self.lbl_right_day.set_text(time.strftime("%A", t).upper())
 
     def periodic_clock_tick(self):
@@ -671,7 +670,6 @@ class AestheticCalendarDashboard(Gtk.Window):
     def apply_weather_data(self, temp, feels, humid, wind, desc):
         self.lbl_right_temp.set_text(f"{temp}°")
         self.lbl_right_desc.set_text(desc)
-        self.orbit_clock.lbl_cap_temp.set_text(f"{temp}°C")
 
         self.m_wind.set_data(f"{wind}k", min(100, int(float(wind)*2)))
         self.m_humid.set_data(f"{humid}%", int(float(humid)))
