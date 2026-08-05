@@ -507,14 +507,21 @@ class AestheticCalendarDashboard(Gtk.Window):
         btn_next.get_style_context().add_class("cal-nav-btn")
         btn_next.connect("clicked", self.on_next_month)
 
-        btn_today = Gtk.Button(label="+")
+        btn_today = Gtk.Button(label="󰸗")
         btn_today.get_style_context().add_class("cal-nav-btn")
+        btn_today.set_tooltip_text("Kembali ke Hari Ini")
         btn_today.connect("clicked", self.on_goto_today)
+
+        btn_add = Gtk.Button(label="+")
+        btn_add.get_style_context().add_class("cal-nav-btn")
+        btn_add.set_tooltip_text("Tambah Pengingat Baru")
+        btn_add.connect("clicked", self.on_add_reminder)
 
         cal_hdr.pack_start(btn_prev, False, False, 0)
         cal_hdr.pack_start(self.lbl_month_hdr, True, True, 0)
         cal_hdr.pack_start(btn_next, False, False, 0)
         cal_hdr.pack_start(btn_today, False, False, 0)
+        cal_hdr.pack_start(btn_add, False, False, 0)
 
         # Calendar Days Grid (7 x 6)
         self.grid = Gtk.Grid()
@@ -729,6 +736,44 @@ class AestheticCalendarDashboard(Gtk.Window):
         self.curr_year = self.today_year
         self.curr_month = self.today_month
         self.render_calendar()
+
+    def on_add_reminder(self, widget):
+        dialog = Gtk.Dialog(
+            title="Tambah Pengingat Baru",
+            transient_for=self,
+            flags=Gtk.DialogFlags.MODAL
+        )
+        dialog.get_style_context().add_class("notif-window")
+        dialog.set_default_size(340, 150)
+
+        box = dialog.get_content_area()
+        box.set_spacing(12)
+        box.set_margin_start(18)
+        box.set_margin_end(18)
+        box.set_margin_top(18)
+        box.set_margin_bottom(18)
+
+        lbl = Gtk.Label(label="📝 Tulis Pengingat / Catatan Baru:")
+        lbl.set_alignment(0, 0.5)
+
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("Contoh: Meeting jam 3 sore...")
+
+        box.pack_start(lbl, False, False, 0)
+        box.pack_start(entry, False, False, 0)
+
+        dialog.add_button("Batal", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Simpan", Gtk.ResponseType.OK)
+
+        dialog.show_all()
+        response = dialog.run()
+
+        if response == Gtk.ResponseType.OK:
+            text = entry.get_text().strip()
+            if text:
+                subprocess.Popen(["notify-send", "-u", "normal", "📌 Pengingat Tersimpan", text])
+
+        dialog.destroy()
 
     def close_window(self):
         if not self.is_closing:
