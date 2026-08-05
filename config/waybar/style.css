@@ -41,14 +41,13 @@ window#waybar {
 
 #network,
 #pulseaudio {
-    min-width: 14px;
-    padding: 3px 8px;
+    padding: 3px 10px;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 #network:hover,
 #pulseaudio:hover {
-    min-width: 135px;
+    color: #ffffff;
     padding: 3px 14px;
 }
 
