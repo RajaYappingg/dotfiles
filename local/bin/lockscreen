@@ -366,17 +366,28 @@ class GradientClock(Gtk.DrawingArea):
 
 
 class MinimalAestheticLockScreen(Gtk.Window):
-    def __init__(self):
+    def __init__(self, monitor=None, is_primary=True):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.set_title("Hyprland Lockscreen")
+        self.is_primary = is_primary
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "lockscreen")
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
-        if hasattr(GtkLayerShell, "set_keyboard_mode"):
-            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        if monitor:
+            GtkLayerShell.set_monitor(self, monitor)
+
+        if is_primary:
+            if hasattr(GtkLayerShell, "set_keyboard_mode"):
+                GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+            else:
+                GtkLayerShell.set_keyboard_interactivity(self, True)
         else:
-            GtkLayerShell.set_keyboard_interactivity(self, True)
+            if hasattr(GtkLayerShell, "set_keyboard_mode"):
+                GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.NONE)
+            else:
+                GtkLayerShell.set_keyboard_interactivity(self, False)
+
         GtkLayerShell.set_exclusive_zone(self, -1)
 
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
@@ -414,57 +425,59 @@ class MinimalAestheticLockScreen(Gtk.Window):
 
         self.update_clock()
 
-        # Spacer between Date and Password Capsule
-        spacer = Gtk.Box()
-        spacer.set_size_request(1, 140)
-
-        # 3. Pill / Capsule Password Entry Box
-        self.pass_event_box = Gtk.EventBox()
-        self.pass_event_box.set_visible_window(False)
-        self.pass_event_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
-        self.pass_event_box.connect("button-press-event", self.on_button_press)
-
-        self.pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        self.pass_box.get_style_context().add_class("pass-entry-box")
-        self.pass_box.set_halign(Gtk.Align.CENTER)
-
-        self.lbl_lock_icon = Gtk.Label(label="󰌾")
-        self.lbl_lock_icon.get_style_context().add_class("lock-icon")
-
-        self.dots_widget = PasswordDotsWidget()
-
-        self.entry_pass = Gtk.Entry()
-        self.entry_pass.set_visibility(False)
-        self.entry_pass.get_style_context().add_class("pass-entry")
-        self.entry_pass.set_width_chars(20)
-        self.entry_pass.connect("activate", self.on_authenticate)
-        self.entry_pass.connect("changed", self.on_typing_changed)
-
-        pass_overlay = Gtk.Overlay()
-        pass_overlay.add(self.dots_widget)
-        pass_overlay.add_overlay(self.entry_pass)
-
-        self.btn_submit = Gtk.Button(label="➔")
-        self.btn_submit.get_style_context().add_class("submit-btn")
-        self.btn_submit.set_relief(Gtk.ReliefStyle.NONE)
-        self.btn_submit.connect("clicked", self.on_authenticate)
-
-        self.pass_box.pack_start(self.lbl_lock_icon, False, False, 0)
-        self.pass_box.pack_start(pass_overlay, True, True, 0)
-        self.pass_box.pack_start(self.btn_submit, False, False, 0)
-
-        self.pass_event_box.add(self.pass_box)
-
-        # Status Label (for incorrect password feedback)
-        self.lbl_status = Gtk.Label(label="")
-        self.lbl_status.get_style_context().add_class("status-label")
-        self.lbl_status.set_halign(Gtk.Align.CENTER)
-
         main_box.pack_start(self.clock_widget, False, False, 0)
         main_box.pack_start(self.lbl_date, False, False, 0)
-        main_box.pack_start(spacer, False, False, 0)
-        main_box.pack_start(self.pass_event_box, False, False, 0)
-        main_box.pack_start(self.lbl_status, False, False, 0)
+
+        if self.is_primary:
+            # Spacer between Date and Password Capsule
+            spacer = Gtk.Box()
+            spacer.set_size_request(1, 140)
+
+            # 3. Pill / Capsule Password Entry Box
+            self.pass_event_box = Gtk.EventBox()
+            self.pass_event_box.set_visible_window(False)
+            self.pass_event_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+            self.pass_event_box.connect("button-press-event", self.on_button_press)
+
+            self.pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            self.pass_box.get_style_context().add_class("pass-entry-box")
+            self.pass_box.set_halign(Gtk.Align.CENTER)
+
+            self.lbl_lock_icon = Gtk.Label(label="󰌾")
+            self.lbl_lock_icon.get_style_context().add_class("lock-icon")
+
+            self.dots_widget = PasswordDotsWidget()
+
+            self.entry_pass = Gtk.Entry()
+            self.entry_pass.set_visibility(False)
+            self.entry_pass.get_style_context().add_class("pass-entry")
+            self.entry_pass.set_width_chars(20)
+            self.entry_pass.connect("activate", self.on_authenticate)
+            self.entry_pass.connect("changed", self.on_typing_changed)
+
+            pass_overlay = Gtk.Overlay()
+            pass_overlay.add(self.dots_widget)
+            pass_overlay.add_overlay(self.entry_pass)
+
+            self.btn_submit = Gtk.Button(label="➔")
+            self.btn_submit.get_style_context().add_class("submit-btn")
+            self.btn_submit.set_relief(Gtk.ReliefStyle.NONE)
+            self.btn_submit.connect("clicked", self.on_authenticate)
+
+            self.pass_box.pack_start(self.lbl_lock_icon, False, False, 0)
+            self.pass_box.pack_start(pass_overlay, True, True, 0)
+            self.pass_box.pack_start(self.btn_submit, False, False, 0)
+
+            self.pass_event_box.add(self.pass_box)
+
+            # Status Label (for incorrect password feedback)
+            self.lbl_status = Gtk.Label(label="")
+            self.lbl_status.get_style_context().add_class("status-label")
+            self.lbl_status.set_halign(Gtk.Align.CENTER)
+
+            main_box.pack_start(spacer, False, False, 0)
+            main_box.pack_start(self.pass_event_box, False, False, 0)
+            main_box.pack_start(self.lbl_status, False, False, 0)
 
         self.main_box = main_box
         self.fx_overlay = FXOverlayCanvas()
@@ -486,8 +499,9 @@ class MinimalAestheticLockScreen(Gtk.Window):
         # Initial hidden states for staggered animation
         self.set_opacity(0.0)
         self.lbl_date.set_opacity(0.0)
-        self.pass_event_box.set_opacity(0.0)
-        self.lbl_status.set_opacity(0.0)
+        if self.is_primary:
+            self.pass_event_box.set_opacity(0.0)
+            self.lbl_status.set_opacity(0.0)
 
         # Activate lockscreen submap to block all Hyprland global shortcuts (e.g. Super+R, Super+Q, Super+E, etc.)
         try:
@@ -496,7 +510,8 @@ class MinimalAestheticLockScreen(Gtk.Window):
             pass
 
         self.show_all()
-        self.entry_pass.grab_focus()
+        if self.is_primary:
+            self.entry_pass.grab_focus()
 
         GLib.timeout_add(1000, self.update_clock)
         GLib.timeout_add(16, self.on_animation_frame)
@@ -510,8 +525,9 @@ class MinimalAestheticLockScreen(Gtk.Window):
         return True
 
     def on_typing_changed(self, entry):
-        text = entry.get_text()
-        self.dots_widget.set_dot_count(len(text))
+        if self.is_primary:
+            text = entry.get_text()
+            self.dots_widget.set_dot_count(len(text))
 
     def on_animation_frame(self):
         now = time.time()
@@ -536,28 +552,30 @@ class MinimalAestheticLockScreen(Gtk.Window):
                 self.lbl_date.set_margin_top(4 + margin_offset)
 
             # Drive animations
-            self.dots_widget.queue_draw()
+            if self.is_primary:
+                self.dots_widget.queue_draw()
             self.fx_overlay.queue_draw()
 
             # 4. Pass Box Entrance (0.15s -> 0.55s)
-            pass_elapsed = elapsed - 0.15
-            if pass_elapsed > 0:
-                pass_t = ease_out_back(pass_elapsed / 0.40)
-                self.pass_event_box.set_opacity(min(1.0, pass_t))
-                margin_offset = int((1.0 - pass_t) * 25)
-                self.pass_event_box.set_margin_top(10 + margin_offset)
+            if self.is_primary:
+                pass_elapsed = elapsed - 0.15
+                if pass_elapsed > 0:
+                    pass_t = ease_out_back(pass_elapsed / 0.40)
+                    self.pass_event_box.set_opacity(min(1.0, pass_t))
+                    margin_offset = int((1.0 - pass_t) * 25)
+                    self.pass_event_box.set_margin_top(10 + margin_offset)
 
-            # 5. Red Screen Shake (if triggered on wrong password)
-            if self.red_shake_start > 0:
-                s_elapsed = now - self.red_shake_start
-                if s_elapsed < 0.50:
-                    offset = math.sin(s_elapsed * 42.0) * 24.0 * math.exp(-s_elapsed * 5.5)
-                    self.main_box.set_margin_start(int(offset))
-                    self.main_box.set_margin_end(int(-offset))
-                else:
-                    self.red_shake_start = 0
-                    self.main_box.set_margin_start(0)
-                    self.main_box.set_margin_end(0)
+                # 5. Red Screen Shake (if triggered on wrong password)
+                if self.red_shake_start > 0:
+                    s_elapsed = now - self.red_shake_start
+                    if s_elapsed < 0.50:
+                        offset = math.sin(s_elapsed * 42.0) * 24.0 * math.exp(-s_elapsed * 5.5)
+                        self.main_box.set_margin_start(int(offset))
+                        self.main_box.set_margin_end(int(-offset))
+                    else:
+                        self.red_shake_start = 0
+                        self.main_box.set_margin_start(0)
+                        self.main_box.set_margin_end(0)
 
             # Re-draw clock for any active digit transitions
             self.clock_widget.queue_draw()
@@ -577,19 +595,31 @@ class MinimalAestheticLockScreen(Gtk.Window):
                 Gtk.main_quit()
                 return False
 
+    def trigger_unlock_all(self):
+        for win in getattr(self, 'peer_windows', []):
+            win.is_closing = True
+            win.close_time = time.time()
+        self.is_closing = True
+        self.close_time = time.time()
+
+    def trigger_wrong_password_all(self):
+        for win in getattr(self, 'peer_windows', []):
+            win.fx_overlay.trigger_red_flash()
+
     def on_button_press(self, widget, event):
-        self.entry_pass.grab_focus()
+        if self.is_primary:
+            self.entry_pass.grab_focus()
         return False
 
     def on_key_press(self, widget, event):
-        if event.keyval == Gdk.KEY_Escape:
+        if self.is_primary and event.keyval == Gdk.KEY_Escape:
             self.entry_pass.set_text("")
             self.dots_widget.set_dot_count(0)
             return True
         return False
 
     def on_authenticate(self, widget):
-        if self.is_authenticating:
+        if not self.is_primary or self.is_authenticating:
             return
         password = self.entry_pass.get_text()
         if not password:
@@ -651,8 +681,7 @@ class MinimalAestheticLockScreen(Gtk.Window):
             if os.path.exists(nani_sound):
                 subprocess.Popen(["mpv", "--no-video", "--volume=100", nani_sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            self.is_closing = True
-            self.close_time = time.time()
+            self.trigger_unlock_all()
         else:
             self.failed_attempts += 1
             if self.failed_attempts >= 3:
@@ -664,6 +693,8 @@ class MinimalAestheticLockScreen(Gtk.Window):
             muda_sound = os.path.expanduser("~/.local/share/sounds/mudamuda.mp3")
             if os.path.exists(muda_sound):
                 subprocess.Popen(["mpv", "--no-video", "--volume=100", muda_sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            self.trigger_wrong_password_all()
 
             self.entry_pass.set_text("")
             self.dots_widget.set_dot_count(0)
@@ -692,7 +723,26 @@ def main():
         subprocess.Popen(["mpv", "--no-video", "--volume=100", sound_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     try:
-        app = MinimalAestheticLockScreen()
+        display = Gdk.Display.get_default()
+        n_monitors = display.get_n_monitors() if display else 1
+
+        windows = []
+        primary_win = None
+
+        if n_monitors > 1:
+            for i in range(n_monitors):
+                monitor = display.get_monitor(i)
+                is_primary = (i == 0)
+                win = MinimalAestheticLockScreen(monitor=monitor, is_primary=is_primary)
+                windows.append(win)
+                if is_primary:
+                    primary_win = win
+            if primary_win:
+                primary_win.peer_windows = [w for w in windows if w != primary_win]
+        else:
+            primary_win = MinimalAestheticLockScreen(is_primary=True)
+            primary_win.peer_windows = []
+
         Gtk.main()
     finally:
         if os.path.exists(LOCKSCREEN_PID):
