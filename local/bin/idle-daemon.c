@@ -248,11 +248,15 @@ int main(int argc, char **argv) {
             uint32_t timeout_sec = timeout_ms / 1000;
             long sec_since_gamepad = (last_gamepad_activity > 0) ? (long)(now - last_gamepad_activity) : 999999;
 
-            if (sec_since_gamepad < (long)timeout_sec) {
+            // Check if media (video/audio) is currently playing via playerctl
+            int is_playing = (system("playerctl status 2>/dev/null | grep -qi Playing") == 0);
+
+            if (is_playing) {
+                // Media is playing, suppress lockscreen
+            } else if (sec_since_gamepad < (long)timeout_sec) {
                 // Gamepad active within idle window, suppress lockscreen
             } else {
-                printf("[idle-daemon] IDLE timeout (%u ms) reached (gamepad idle for %lds) -> launching lockscreen\n",
-                       timeout_ms, sec_since_gamepad);
+                printf("[idle-daemon] IDLE timeout (%u ms) reached -> launching lockscreen\n", timeout_ms);
                 fflush(stdout);
                 system("hyprctl dispatch 'hl.dsp.exec_cmd(\"/home/zaki/.local/bin/lockscreen\")'");
                 lockscreen_launched = 1;

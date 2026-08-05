@@ -83,24 +83,18 @@
     },
 
     "network": {
-        "format-wifi": "󰤨",
-        "format-wifi-alt": "󰤨  {essid}",
-        "format-ethernet": "󰈀",
-        "format-ethernet-alt": "󰈀  {ipaddr}",
-        "format-linked": "󰈀",
-        "format-linked-alt": "󰈀  {ifname}",
-        "format-disconnected": "󰤭",
-        "format-disconnected-alt": "󰤭  Offline",
+        "format-wifi": "󰤨<small>  {essid}</small>",
+        "format-ethernet": "󰈀<small>  {ipaddr}</small>",
+        "format-linked": "󰈀<small>  {ifname}</small>",
+        "format-disconnected": "󰤭<small>  Offline</small>",
         "tooltip-format": "󰤨 {essid} ({signalStrength}%)\n󰩟 {ifname} via {gwaddr}",
         "on-click": "kitty --class floating_wifi -e /home/zaki/.local/bin/wifi-menu",
         "interval": 5
     },
 
     "pulseaudio": {
-        "format": "{icon}",
-        "format-alt": "{icon}  {volume}%",
-        "format-muted": "󰝟",
-        "format-muted-alt": "󰝟  Muted",
+        "format": "{icon}<small>  {volume}%</small>",
+        "format-muted": "󰝟<small>  Muted</small>",
         "format-icons": {
             "headphone": "",
             "default": ["󰕿", "󰖀", "󰕾"]
