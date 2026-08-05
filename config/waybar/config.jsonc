@@ -101,9 +101,9 @@
             "headphone": "",
             "default": ["󰕿", "󰖀", "󰕾"]
         },
-        "tooltip-format": "Volume: {volume}%\nClick: Audio Control Menu",
-        "on-click": "kitty --class floating_vol -e /home/zaki/.local/bin/volume-menu",
-        "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+        "tooltip-format": "Volume: {volume}%\nKlik Kiri/Kanan: Buka Audio & Volume Control Mixer",
+        "on-click": "/home/zaki/.local/bin/audio-control-gui",
+        "on-click-right": "/home/zaki/.local/bin/audio-control-gui"
     },
 
     "battery": {

@@ -1,0 +1,411 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import subprocess
+import re
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gtk, Gdk, GLib
+
+CSS = b"""
+* {
+    font-family: "JetBrains Mono", "Inter", sans-serif;
+    outline: none;
+    box-shadow: none;
+}
+
+window.audiomixer-window {
+    background-color: #0f172a;
+    color: #f8fafc;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 18px;
+}
+
+.header-box {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 16px 20px;
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+}
+
+.header-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+.header-sub {
+    font-size: 12px;
+    color: #38bdf8;
+}
+
+.card-box {
+    background-color: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.card-badge {
+    background-color: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.dev-btn {
+    background-color: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.dev-btn:hover {
+    background-color: #334155;
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+.dev-btn.active {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+scale trough {
+    background-color: #0f172a;
+    border-radius: 6px;
+    min-height: 8px;
+}
+
+scale highlight {
+    background: linear-gradient(90deg, #38bdf8 0%, #818cf8 100%);
+    border-radius: 6px;
+}
+
+scale slider {
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+}
+
+.close-btn {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #f1f5f9;
+    border-radius: 8px;
+    padding: 6px 12px;
+    border: none;
+    font-weight: bold;
+}
+
+.close-btn:hover {
+    background-color: #ef4444;
+    color: #ffffff;
+}
+
+.mute-btn {
+    background-color: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.mute-btn.muted {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.4);
+}
+"""
+
+class AudioControlGUI(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Audio Control & Volume Mixer")
+        self.set_name("audiomixer-window")
+        self.set_default_size(720, 580)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_wmclass("floating_vol", "floating_vol")
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # Header
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header.get_style_context().add_class("header-box")
+
+        title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_title = Gtk.Label(label="🔊 AUDIO & VOLUME CONTROL MIXER", xalign=0)
+        lbl_title.get_style_context().add_class("header-title")
+        lbl_sub = Gtk.Label(label="Atur Perangkat Output (Suara), Input (Mic), & Volume Masing-Masing App", xalign=0)
+        lbl_sub.get_style_context().add_class("header-sub")
+        title_vbox.pack_start(lbl_title, False, False, 0)
+        title_vbox.pack_start(lbl_sub, False, False, 0)
+
+        header.pack_start(title_vbox, True, True, 0)
+
+        btn_close = Gtk.Button(label=" ✕ ")
+        btn_close.get_style_context().add_class("close-btn")
+        btn_close.connect("clicked", lambda b: self.close())
+        header.pack_start(btn_close, False, False, 0)
+
+        main_box.pack_start(header, False, False, 0)
+
+        # Scrolled Area
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.content_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.content_vbox.set_margin_top(16)
+        self.content_vbox.set_margin_bottom(16)
+        self.content_vbox.set_margin_left(20)
+        self.content_vbox.set_margin_right(20)
+        scrolled.add(self.content_vbox)
+        main_box.pack_start(scrolled, True, True, 0)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("destroy", Gtk.main_quit)
+
+        self.refresh_audio_data()
+
+    def get_pactl_json(self, target):
+        try:
+            res = subprocess.run(["pactl", "-f", "json", "list", target], capture_output=True, text=True)
+            if res.returncode == 0:
+                return json.loads(res.stdout)
+        except Exception:
+            pass
+        return []
+
+    def get_default_sink_source(self):
+        def_sink = ""
+        def_source = ""
+        try:
+            res = subprocess.run(["pactl", "info"], capture_output=True, text=True)
+            for line in res.stdout.splitlines():
+                if "Default Sink:" in line:
+                    def_sink = line.split(":", 1)[1].strip()
+                elif "Default Source:" in line:
+                    def_source = line.split(":", 1)[1].strip()
+        except Exception:
+            pass
+        return def_sink, def_source
+
+    def refresh_audio_data(self):
+        # Clear existing widgets in content_vbox
+        for child in self.content_vbox.get_children():
+            self.content_vbox.remove(child)
+
+        def_sink, def_source = self.get_default_sink_source()
+        sinks = [s for s in self.get_pactl_json("sinks") if not s.get("name", "").endswith(".monitor")]
+        sources = [s for s in self.get_pactl_json("sources") if not s.get("name", "").endswith(".monitor")]
+        sink_inputs = self.get_pactl_json("sink-inputs")
+
+        # 1. OUTPUT DEVICES (Perangkat Pemutar Suara)
+        out_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        out_card.get_style_context().add_class("card-box")
+
+        lbl_out_title = Gtk.Label(label="🎧 Output Devices (Pilih Speaker / Headphone / HDMI)", xalign=0)
+        lbl_out_title.get_style_context().add_class("card-title")
+        out_card.pack_start(lbl_out_title, False, False, 0)
+
+        out_btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for s in sinks:
+            s_name = s.get("name", "")
+            s_desc = s.get("description", s_name)
+            is_active = (s_name == def_sink)
+
+            btn = Gtk.Button(label=f"{'⭐ [Aktif] ' if is_active else '   '} {s_desc}")
+            btn.get_style_context().add_class("dev-btn")
+            if is_active:
+                btn.get_style_context().add_class("active")
+
+            btn.connect("clicked", lambda b, name=s_name: self.set_default_device("sink", name))
+            out_btn_box.pack_start(btn, False, False, 0)
+
+        out_card.pack_start(out_btn_box, False, False, 0)
+
+        # Master Output Volume Slider
+        out_b_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        out_b_box.pack_start(Gtk.Label(label="Master Volume Output:"), False, False, 0)
+
+        master_vol = self.get_master_volume("@DEFAULT_AUDIO_SINK@")
+        scale_out = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 2)
+        scale_out.set_value(master_vol)
+        scale_out.set_draw_value(False)
+        scale_out.connect("value-changed", lambda sc: self.set_master_volume("@DEFAULT_AUDIO_SINK@", sc.get_value()))
+        out_b_box.pack_start(scale_out, True, True, 0)
+
+        lbl_v_out = Gtk.Label(label=f"{master_vol}%")
+        lbl_v_out.get_style_context().add_class("card-title")
+        out_b_box.pack_start(lbl_v_out, False, False, 0)
+
+        out_card.pack_start(out_b_box, False, False, 0)
+        self.content_vbox.pack_start(out_card, False, False, 0)
+
+        # 2. INPUT DEVICES (Perangkat Mikrofon / Perujuk Suara)
+        in_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        in_card.get_style_context().add_class("card-box")
+
+        lbl_in_title = Gtk.Label(label="🎙️ Input Devices (Pilih Mikrofon)", xalign=0)
+        lbl_in_title.get_style_context().add_class("card-title")
+        in_card.pack_start(lbl_in_title, False, False, 0)
+
+        in_btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for s in sources:
+            s_name = s.get("name", "")
+            s_desc = s.get("description", s_name)
+            is_active = (s_name == def_source)
+
+            btn = Gtk.Button(label=f"{'⭐ [Aktif] ' if is_active else '   '} {s_desc}")
+            btn.get_style_context().add_class("dev-btn")
+            if is_active:
+                btn.get_style_context().add_class("active")
+
+            btn.connect("clicked", lambda b, name=s_name: self.set_default_device("source", name))
+            in_btn_box.pack_start(btn, False, False, 0)
+
+        in_card.pack_start(in_btn_box, False, False, 0)
+
+        # Master Input Volume Slider
+        in_b_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        in_b_box.pack_start(Gtk.Label(label="Master Volume Mic:"), False, False, 0)
+
+        mic_vol = self.get_master_volume("@DEFAULT_AUDIO_SOURCE@")
+        scale_in = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 2)
+        scale_in.set_value(mic_vol)
+        scale_in.set_draw_value(False)
+        scale_in.connect("value-changed", lambda sc: self.set_master_volume("@DEFAULT_AUDIO_SOURCE@", sc.get_value()))
+        in_b_box.pack_start(scale_in, True, True, 0)
+
+        lbl_v_in = Gtk.Label(label=f"{mic_vol}%")
+        lbl_v_in.get_style_context().add_class("card-title")
+        in_b_box.pack_start(lbl_v_in, False, False, 0)
+
+        in_card.pack_start(in_b_box, False, False, 0)
+        self.content_vbox.pack_start(in_card, False, False, 0)
+
+        # 3. PER-APPLICATION VOLUME SLIDERS (Suara Masing-masing Aplikasi)
+        app_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        app_card.get_style_context().add_class("card-box")
+
+        lbl_app_title = Gtk.Label(label="🎛️ Volume Masing-Masing Aplikasi (App Mixer)", xalign=0)
+        lbl_app_title.get_style_context().add_class("card-title")
+        app_card.pack_start(lbl_app_title, False, False, 0)
+
+        if not sink_inputs:
+            lbl_empty = Gtk.Label(label="Tidak ada aplikasi yang sedang memutar suara saat ini.", xalign=0)
+            lbl_empty.get_style_context().add_class("header-sub")
+            app_card.pack_start(lbl_empty, False, False, 0)
+        else:
+            for inp in sink_inputs:
+                idx = inp.get("index")
+                props = inp.get("properties", {})
+                app_name = props.get("application.name") or props.get("node.name") or "Aplikasi Audio"
+                media_name = props.get("media.name") or ""
+                
+                vol_dict = inp.get("volume", {})
+                pct_str = "100%"
+                if "front-left" in vol_dict:
+                    pct_str = vol_dict["front-left"].get("value_percent", "100%")
+                vol_val = int(pct_str.rstrip("%")) if pct_str.endswith("%") else 100
+                is_muted = inp.get("mute", False)
+
+                row_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+                
+                app_lbl_str = f"🎵 {app_name}" + (f" ({media_name[:35]}...)" if len(media_name) > 35 else (f" ({media_name})" if media_name else ""))
+                lbl_app = Gtk.Label(label=app_lbl_str, xalign=0)
+                lbl_app.get_style_context().add_class("card-title")
+                row_box.pack_start(lbl_app, False, False, 0)
+
+                slider_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                
+                sc_app = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 2)
+                sc_app.set_value(vol_val)
+                sc_app.set_draw_value(False)
+                sc_app.connect("value-changed", lambda sc, i=idx: self.set_app_volume(i, sc.get_value()))
+                slider_box.pack_start(sc_app, True, True, 0)
+
+                lbl_val = Gtk.Label(label=f"{vol_val}%")
+                lbl_val.set_size_request(40, -1)
+                lbl_val.get_style_context().add_class("card-title")
+                slider_box.pack_start(lbl_val, False, False, 0)
+
+                btn_m = Gtk.Button(label="Muted" if is_muted else "Mute")
+                btn_m.get_style_context().add_class("mute-btn")
+                if is_muted:
+                    btn_m.get_style_context().add_class("muted")
+                btn_m.connect("clicked", lambda b, i=idx: self.toggle_app_mute(i))
+                slider_box.pack_start(btn_m, False, False, 0)
+
+                row_box.pack_start(slider_box, False, False, 0)
+                app_card.pack_start(row_box, False, False, 0)
+
+        self.content_vbox.pack_start(app_card, False, False, 0)
+        self.content_vbox.show_all()
+
+    def get_master_volume(self, target):
+        try:
+            res = subprocess.run(["wpctl", "get-volume", target], capture_output=True, text=True)
+            m = re.search(r"Volume:\s+([0-9.]+)", res.stdout)
+            if m:
+                return int(float(m.group(1)) * 100)
+        except Exception:
+            pass
+        return 100
+
+    def set_master_volume(self, target, val):
+        subprocess.run(["wpctl", "set-volume", target, f"{int(val)}%"], capture_output=True)
+
+    def set_default_device(self, dev_type, name):
+        if dev_type == "sink":
+            subprocess.run(["pactl", "set-default-sink", name], capture_output=True)
+            subprocess.run(["notify-send", "-r", "9920", "-i", "audio-card", "Audio Output Device", f"Output diubah ke: {name}"])
+        else:
+            subprocess.run(["pactl", "set-default-source", name], capture_output=True)
+            subprocess.run(["notify-send", "-r", "9921", "-i", "audio-input-microphone", "Audio Input Device", f"Mikrofon diubah ke: {name}"])
+        self.refresh_audio_data()
+
+    def set_app_volume(self, input_idx, val):
+        subprocess.run(["pactl", "set-sink-input-volume", str(input_idx), f"{int(val)}%"], capture_output=True)
+
+    def toggle_app_mute(self, input_idx):
+        subprocess.run(["pactl", "set-sink-input-mute", str(input_idx), "toggle"], capture_output=True)
+        self.refresh_audio_data()
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+
+def main():
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(),
+        css_provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+
+    app = AudioControlGUI()
+    app.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()
