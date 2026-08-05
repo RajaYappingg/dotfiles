@@ -83,23 +83,29 @@
     },
 
     "network": {
-        "format-wifi": "󰤨<span size='1'>  {essid}</span>",
-        "format-ethernet": "󰈀<span size='1'>  {ipaddr}</span>",
-        "format-linked": "󰈀<span size='1'>  {ifname} (No IP)</span>",
-        "format-disconnected": "󰤭<span size='1'>  Offline</span>",
-        "tooltip-format": "󰩟 {ifname} via {gwaddr}",
+        "format-wifi": "󰤨",
+        "format-wifi-alt": "󰤨  {essid}",
+        "format-ethernet": "󰈀",
+        "format-ethernet-alt": "󰈀  {ipaddr}",
+        "format-linked": "󰈀",
+        "format-linked-alt": "󰈀  {ifname}",
+        "format-disconnected": "󰤭",
+        "format-disconnected-alt": "󰤭  Offline",
+        "tooltip-format": "󰤨 {essid} ({signalStrength}%)\n󰩟 {ifname} via {gwaddr}",
         "on-click": "kitty --class floating_wifi -e /home/zaki/.local/bin/wifi-menu",
         "interval": 5
     },
 
     "pulseaudio": {
-        "format": "{icon}<span size='1'>  {volume}%</span>",
-        "format-muted": "󰝟<span size='1'>  Muted</span>",
+        "format": "{icon}",
+        "format-alt": "{icon}  {volume}%",
+        "format-muted": "󰝟",
+        "format-muted-alt": "󰝟  Muted",
         "format-icons": {
             "headphone": "",
             "default": ["󰕿", "󰖀", "󰕾"]
         },
-        "tooltip-format": "Volume: {volume}%\nKlik Kiri/Kanan: Buka Audio & Volume Control Mixer",
+        "tooltip-format": "󰕾 Volume: {volume}%\nKlik Kiri/Kanan: Buka Audio & Volume Control Mixer",
         "on-click": "/home/zaki/.local/bin/audio-control-gui",
         "on-click-right": "/home/zaki/.local/bin/audio-control-gui"
     },
