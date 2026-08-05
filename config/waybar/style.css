@@ -55,6 +55,8 @@ window#waybar {
     background-color: transparent;
     box-shadow: none;
     font-size: 0px;
+}
+
 #tray:empty,
 #tray.passive {
     margin: 0;
