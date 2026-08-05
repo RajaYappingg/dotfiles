@@ -884,101 +884,6 @@ class DashboardLauncher(Gtk.Window):
         fav_card.pack_start(grid, False, False, 0)
         right_vbox.pack_start(fav_card, False, False, 0)
 
-        # Widget 3: Media Player Widget (Title & Controls Only)
-        media_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        media_card.get_style_context().add_class("widget-card")
-
-        self.lbl_media_title = Gtk.Label(label="NO MEDIA PLAYING")
-        self.lbl_media_title.set_halign(Gtk.Align.CENTER)
-        self.lbl_media_title.set_ellipsize(3)
-        self.lbl_media_title.get_style_context().add_class("media-title")
-
-        self.lbl_media_artist = Gtk.Label(label="PLAYERCTL")
-        self.lbl_media_artist.set_halign(Gtk.Align.CENTER)
-        self.lbl_media_artist.set_ellipsize(3)
-        self.lbl_media_artist.get_style_context().add_class("media-artist")
-
-        ctrl_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        ctrl_hbox.set_halign(Gtk.Align.CENTER)
-        ctrl_hbox.set_margin_top(4)
-
-        btn_prev = Gtk.Button(label="⏮")
-        btn_prev.set_halign(Gtk.Align.CENTER)
-        btn_prev.set_valign(Gtk.Align.CENTER)
-        btn_prev.get_style_context().add_class("media-ctrl-btn")
-        btn_prev.connect("clicked", lambda b: self.media_cmd(["playerctl", "previous"]))
-
-        self.btn_play = Gtk.Button(label="󰏤")
-        self.btn_play.set_halign(Gtk.Align.CENTER)
-        self.btn_play.set_valign(Gtk.Align.CENTER)
-        self.btn_play.get_style_context().add_class("media-ctrl-btn-play")
-        self.btn_play.connect("clicked", lambda b: self.media_cmd(["playerctl", "play-pause"]))
-
-        btn_next = Gtk.Button(label="⏭")
-        btn_next.set_halign(Gtk.Align.CENTER)
-        btn_next.set_valign(Gtk.Align.CENTER)
-        btn_next.get_style_context().add_class("media-ctrl-btn")
-        btn_next.connect("clicked", lambda b: self.media_cmd(["playerctl", "next"]))
-
-        ctrl_hbox.pack_start(btn_prev, False, False, 0)
-        ctrl_hbox.pack_start(self.btn_play, False, False, 0)
-        ctrl_hbox.pack_start(btn_next, False, False, 0)
-
-        media_card.pack_start(self.lbl_media_title, False, False, 0)
-        media_card.pack_start(self.lbl_media_artist, False, False, 0)
-        media_card.pack_start(ctrl_hbox, False, False, 0)
-
-        right_vbox.pack_start(media_card, False, False, 0)
-
-        # Widget 4: Brightness & Volume Controls Card
-        controls_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        controls_card.get_style_context().add_class("widget-card")
-
-        # Row 1: Brightness Control
-        bright_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-
-        lbl_bright_icon = Gtk.Label()
-        lbl_bright_icon.set_markup("<span foreground='#ffbb33' font='13'>󰃠</span>")
-        lbl_bright_icon.get_style_context().add_class("slider-icon")
-
-        self.scale_bright = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 5, 100, 1)
-        self.scale_bright.set_draw_value(False)
-        self.scale_bright.get_style_context().add_class("bright-scale")
-        self.scale_bright.connect("value-changed", self.on_bright_slider_changed)
-
-        self.lbl_bright_val = Gtk.Label(label="100%")
-        self.lbl_bright_val.set_halign(Gtk.Align.END)
-        self.lbl_bright_val.get_style_context().add_class("slider-val-label")
-
-        bright_box.pack_start(lbl_bright_icon, False, False, 0)
-        bright_box.pack_start(self.scale_bright, True, True, 0)
-        bright_box.pack_start(self.lbl_bright_val, False, False, 0)
-
-        # Row 2: Volume Control
-        vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-
-        self.lbl_vol_icon = Gtk.Label()
-        self.lbl_vol_icon.set_markup("<span foreground='#00d2ff' font='13'>󰕾</span>")
-        self.lbl_vol_icon.get_style_context().add_class("slider-icon")
-
-        self.scale_vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
-        self.scale_vol.set_draw_value(False)
-        self.scale_vol.get_style_context().add_class("vol-scale")
-        self.scale_vol.connect("value-changed", self.on_vol_slider_changed)
-
-        self.lbl_vol_val = Gtk.Label(label="100%")
-        self.lbl_vol_val.set_halign(Gtk.Align.END)
-        self.lbl_vol_val.get_style_context().add_class("slider-val-label")
-
-        vol_box.pack_start(self.lbl_vol_icon, False, False, 0)
-        vol_box.pack_start(self.scale_vol, True, True, 0)
-        vol_box.pack_start(self.lbl_vol_val, False, False, 0)
-
-        controls_card.pack_start(bright_box, False, False, 0)
-        controls_card.pack_start(vol_box, False, False, 0)
-
-        right_vbox.pack_start(controls_card, False, False, 0)
-
         # Widget 4.5: Fan Speed Controls Card (CPU & GPU Fan Percentages + RPM + Auto mode)
         fan_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         fan_card.get_style_context().add_class("widget-card")
@@ -1125,6 +1030,58 @@ class DashboardLauncher(Gtk.Window):
 
         sys_card.pack_start(sys_grid, False, False, 0)
         right_vbox.pack_start(sys_card, False, False, 0)
+
+        # Widget 6: Media Player Card (At the very bottom, with album art ON TOP of title)
+        media_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        media_card.get_style_context().add_class("widget-card")
+
+        self.album_art_img = Gtk.Image()
+        self.album_art_img.set_halign(Gtk.Align.CENTER)
+        self.album_art_img.set_size_request(140, 140)
+
+        self.lbl_media_title = Gtk.Label(label="NO MEDIA PLAYING")
+        self.lbl_media_title.set_halign(Gtk.Align.CENTER)
+        self.lbl_media_title.set_ellipsize(3)
+        self.lbl_media_title.get_style_context().add_class("media-title")
+
+        self.lbl_media_artist = Gtk.Label(label="PLAYERCTL")
+        self.lbl_media_artist.set_halign(Gtk.Align.CENTER)
+        self.lbl_media_artist.set_ellipsize(3)
+        self.lbl_media_artist.get_style_context().add_class("media-artist")
+
+        ctrl_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ctrl_hbox.set_halign(Gtk.Align.CENTER)
+        ctrl_hbox.set_margin_top(4)
+
+        btn_prev = Gtk.Button(label="⏮")
+        btn_prev.set_halign(Gtk.Align.CENTER)
+        btn_prev.set_valign(Gtk.Align.CENTER)
+        btn_prev.get_style_context().add_class("media-ctrl-btn")
+        btn_prev.connect("clicked", lambda b: self.media_cmd(["playerctl", "previous"]))
+
+        self.btn_play = Gtk.Button(label="󰏤")
+        self.btn_play.set_halign(Gtk.Align.CENTER)
+        self.btn_play.set_valign(Gtk.Align.CENTER)
+        self.btn_play.get_style_context().add_class("media-ctrl-btn-play")
+        self.btn_play.connect("clicked", lambda b: self.media_cmd(["playerctl", "play-pause"]))
+
+        btn_next = Gtk.Button(label="⏭")
+        btn_next.set_halign(Gtk.Align.CENTER)
+        btn_next.set_valign(Gtk.Align.CENTER)
+        btn_next.get_style_context().add_class("media-ctrl-btn")
+        btn_next.connect("clicked", lambda b: self.media_cmd(["playerctl", "next"]))
+
+        ctrl_hbox.pack_start(btn_prev, False, False, 0)
+        ctrl_hbox.pack_start(self.btn_play, False, False, 0)
+        ctrl_hbox.pack_start(btn_next, False, False, 0)
+
+        # Pack vertical order: 1. Album Art, 2. Title, 3. Artist, 4. Controls
+        media_card.pack_start(self.album_art_img, False, False, 0)
+        media_card.pack_start(self.lbl_media_title, False, False, 0)
+        media_card.pack_start(self.lbl_media_artist, False, False, 0)
+        media_card.pack_start(ctrl_hbox, False, False, 0)
+
+        right_vbox.pack_start(media_card, False, False, 0)
 
         right_scrolled = Gtk.ScrolledWindow()
         right_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -1407,23 +1364,6 @@ class DashboardLauncher(Gtk.Window):
             self._updating_sliders = False
 
     def update_sliders(self):
-        curr_bright, _ = get_brightness()
-        curr_vol, muted = get_volume()
-        
-        self._updating_sliders = True
-        try:
-            self.scale_bright.set_value(curr_bright)
-            self.lbl_bright_val.set_text(f"{curr_bright}%")
-
-            self.scale_vol.set_value(curr_vol)
-            self.lbl_vol_val.set_text(f"{curr_vol}%")
-            if muted or curr_vol == 0:
-                self.lbl_vol_icon.set_markup("<span foreground='#ff5555' font='13'>󰝟</span>")
-            else:
-                self.lbl_vol_icon.set_markup("<span foreground='#00d2ff' font='13'>󰕾</span>")
-        finally:
-            self._updating_sliders = False
-
         self.update_fan_ui()
 
     def update_media(self):
@@ -1539,6 +1479,10 @@ class DashboardLauncher(Gtk.Window):
         except Exception:
             pass
 
+    def set_placeholder_art(self):
+        pixbuf = create_placeholder_pixbuf(size=130, radius=16)
+        GLib.idle_add(self.album_art_img.set_from_pixbuf, pixbuf)
+
     def _apply_media_info(self, title, artist, status, art_url="", song_url=""):
         self.lbl_media_title.set_text(title)
         self.lbl_media_artist.set_text(artist)
@@ -1547,6 +1491,14 @@ class DashboardLauncher(Gtk.Window):
             self.btn_play.set_label("󰏤")
         else:
             self.btn_play.set_label("󰐊")
+
+        art_target = get_hd_art_target(art_url, song_url, title)
+        if art_target and art_target != getattr(self, "current_art_url", None):
+            self.current_art_url = art_target
+            threading.Thread(target=self.load_album_art, args=(art_target,), daemon=True).start()
+        elif not art_target:
+            self.current_art_url = None
+            self.set_placeholder_art()
 
     def load_album_art(self, art_target):
         try:
@@ -1561,7 +1513,7 @@ class DashboardLauncher(Gtk.Window):
 
             if local_path and os.path.exists(local_path):
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file(local_path)
-                hd_rounded = crop_rounded_pixbuf(pixbuf, size=120, radius=16)
+                hd_rounded = crop_rounded_pixbuf(pixbuf, size=130, radius=16)
                 GLib.idle_add(self.album_art_img.set_from_pixbuf, hd_rounded)
                 GLib.idle_add(self.album_art_img.show)
             else:
