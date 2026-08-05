@@ -429,6 +429,27 @@ hl.layer_rule({
     ignore_alpha = 0.1,
 })
 
+hl.layer_rule({
+    name  = "audio-control-blur",
+    match = { namespace = "^audio-control-gui$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
+
+hl.layer_rule({
+    name  = "notifications-blur",
+    match = { namespace = "^notifications$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
+
+hl.layer_rule({
+    name  = "dunst-blur",
+    match = { namespace = "^dunst$" },
+    blur  = true,
+    ignore_alpha = 0.1,
+})
+
 -- Hyprland-run windowrule
 hl.window_rule({
     name  = "move-hyprland-run",

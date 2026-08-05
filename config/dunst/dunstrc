@@ -10,7 +10,7 @@
     history_length = 50
 
     progress_bar = true
-    progress_bar_height = 4
+    progress_bar_height = 6
     progress_bar_frame_width = 0
     progress_bar_min_width = 150
     progress_bar_max_width = 300
@@ -22,8 +22,8 @@
     padding = 14
     horizontal_padding = 16
     text_icon_padding = 14
-    frame_width = 1
-    frame_color = "#ffffff"
+    frame_width = 2
+    frame_color = "#0571fc"
     gap_size = 10
 
     font = Inter 10.5, FiraCode Nerd Font 10.5
@@ -48,19 +48,22 @@
     mouse_right_click = close_all
 
 [urgency_low]
-    background = "#000000"
+    background = "#142147E6"
     foreground = "#ffffff"
-    frame_color = "#444444"
+    frame_color = "#0571fc"
+    highlight = "#0571fc"
     timeout = 4
 
 [urgency_normal]
-    background = "#000000"
+    background = "#142147E6"
     foreground = "#ffffff"
-    frame_color = "#ffffff"
+    frame_color = "#0571fc"
+    highlight = "#0571fc"
     timeout = 5
 
 [urgency_critical]
-    background = "#000000"
+    background = "#142147E6"
     foreground = "#ffffff"
     frame_color = "#ff5555"
+    highlight = "#ff5555"
     timeout = 0
