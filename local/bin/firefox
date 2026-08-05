@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Firefox Low-RAM Memory Allocator Launcher
+# Firefox High-FPS Wayland Launcher
 export MOZ_ENABLE_WAYLAND=1
+export MOZ_WEBRENDER=1
 export MALLOC_CONF="background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000"
 exec /usr/bin/firefox "$@"
