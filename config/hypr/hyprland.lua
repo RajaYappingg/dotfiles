@@ -67,6 +67,7 @@ hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
 hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
+hl.env("MOZ_ENABLE_WAYLAND", "1")
 hl.env("GDK_SCALE", "1")
 hl.env("XDG_DATA_DIRS", "/usr/share:/usr/local/share:/var/lib/flatpak/exports/share:/home/zaki/.local/share/flatpak/exports/share")
 
