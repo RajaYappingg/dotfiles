@@ -41,19 +41,15 @@ window#waybar {
 
 #network,
 #pulseaudio {
-    min-width: 16px;
+    min-width: 14px;
     padding: 3px 8px;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 #network:hover,
 #pulseaudio:hover {
-    background-color: @primary;
-    color: @bg_dark;
-    border-color: @primary;
     min-width: 135px;
     padding: 3px 14px;
-    box-shadow: 0 0 12px alpha(@primary, 0.6);
 }
 
 #battery.full:not(.discharging),

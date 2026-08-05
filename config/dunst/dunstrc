@@ -24,7 +24,7 @@
     horizontal_padding = 16
     text_icon_padding = 14
     frame_width = 2
-    frame_color = "#ff88b1"
+    frame_color = "#19cc91"
     gap_size = 10
 
     font = Inter 10.5, FiraCode Nerd Font 10.5
@@ -49,21 +49,21 @@
     mouse_right_click = close_all
 
 [urgency_low]
-    background = "#3c2539E6"
+    background = "#182e34E6"
     foreground = "#ffffff"
-    frame_color = "#ff88b1"
-    highlight = "#ff88b1"
+    frame_color = "#19cc91"
+    highlight = "#19cc91"
     timeout = 4
 
 [urgency_normal]
-    background = "#3c2539E6"
+    background = "#182e34E6"
     foreground = "#ffffff"
-    frame_color = "#ff88b1"
-    highlight = "#ff88b1"
+    frame_color = "#19cc91"
+    highlight = "#19cc91"
     timeout = 5
 
 [urgency_critical]
-    background = "#3c2539E6"
+    background = "#182e34E6"
     foreground = "#ffffff"
     frame_color = "#ff5555"
     highlight = "#ff5555"
