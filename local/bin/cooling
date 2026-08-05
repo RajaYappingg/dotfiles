@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Script Cooling Laptop - Set 100% Fan Speed for 1 Minute then Restore to Auto
+
+DURATION=${1:-60} # Default 60 seconds (1 minute)
+
+# Send notification helper (dunstify or notify-send)
+notify_cmd() {
+    if command -v dunstify &>/dev/null; then
+        dunstify "$@"
+    else
+        notify-send "$@"
+    fi
+}
+
+# Locate Acer HWMON path
+HWMON_DIR=""
+for h in /sys/class/hwmon/hwmon*; do
+    if [ -f "$h/name" ] && [ "$(cat "$h/name" 2>/dev/null)" = "acer" ]; then
+        HWMON_DIR="$h"
+        break
+    fi
+done
+
+if [ -z "$HWMON_DIR" ]; then
+    for h in /sys/class/hwmon/hwmon*; do
+        if [ -f "$h/pwm1_enable" ]; then
+            HWMON_DIR="$h"
+            break
+        fi
+    done
+fi
+
+if [ -z "$HWMON_DIR" ]; then
+    echo "❌ Error: Interface hwmon fan tidak ditemukan di /sys/class/hwmon!" >&2
+    exit 1
+fi
+
+# Ensure permissions
+if [ ! -w "$HWMON_DIR/pwm1_enable" ]; then
+    echo "🔑 Meminta akses permission (sudo)..."
+    sudo chmod 0666 "$HWMON_DIR"/pwm* 2>/dev/null || true
+fi
+
+RESTORED=0
+REMAINING=$DURATION
+NOTIF_ID=""
+
+cleanup() {
+    if [ "$RESTORED" -eq 0 ]; then
+        RESTORED=1
+        # Set fan controls back to auto mode (2 = auto)
+        echo 2 > "$HWMON_DIR/pwm1_enable" 2>/dev/null || sudo sh -c "echo 2 > '$HWMON_DIR/pwm1_enable'"
+        echo 2 > "$HWMON_DIR/pwm2_enable" 2>/dev/null || sudo sh -c "echo 2 > '$HWMON_DIR/pwm2_enable'"
+        
+        if [ -n "$NOTIF_ID" ]; then
+            if [ "$REMAINING" -gt 0 ]; then
+                notify_cmd -r "$NOTIF_ID" "⚠️ Cooling Dibatalkan" "Kipas dikembalikan ke mode Auto." -u normal
+                echo -e "\n\n⚠️ Cooling dibatalkan! Kipas dikembalikan ke mode Auto."
+            else
+                notify_cmd -r "$NOTIF_ID" "✅ Cooling Selesai" "Mode cooling 100% selesai. Kipas kembali ke mode Auto." -u normal
+                echo -e "\n\n✅ Cooling selesai! Kipas dikembalikan ke mode Auto."
+            fi
+        fi
+    fi
+}
+
+on_interrupt() {
+    cleanup
+    exit 130
+}
+
+trap cleanup EXIT
+trap on_interrupt INT TERM
+
+# Start 100% fan speed
+echo 1 > "$HWMON_DIR/pwm1_enable" 2>/dev/null || sudo sh -c "echo 1 > '$HWMON_DIR/pwm1_enable'"
+echo 255 > "$HWMON_DIR/pwm1" 2>/dev/null || sudo sh -c "echo 255 > '$HWMON_DIR/pwm1'"
+echo 1 > "$HWMON_DIR/pwm2_enable" 2>/dev/null || sudo sh -c "echo 1 > '$HWMON_DIR/pwm2_enable'"
+echo 255 > "$HWMON_DIR/pwm2" 2>/dev/null || sudo sh -c "echo 255 > '$HWMON_DIR/pwm2'"
+
+echo "========================================="
+echo " ❄️  COOLING MODE AKTIF (100% FAN SPEED) "
+echo "========================================="
+echo " Kipas: Kedua kipas laptop (CPU & GPU)"
+echo " Durasi: $DURATION detik (1 menit)"
+echo " Mode akhir: Auto"
+echo " (Tekan Ctrl+C untuk membatalkan kapan saja)"
+echo "-----------------------------------------"
+
+NOTIF_ID=$(notify_cmd -p "❄️ Cooling Laptop (100%)" "Memulai pendinginan $DURATION detik..." -h int:value:100 -u normal)
+
+for (( i=DURATION; i>=0; i-- )); do
+    REMAINING=$i
+    PCT=$(( i * 100 / DURATION ))
+    
+    FAN1_RPM=$(cat "$HWMON_DIR/fan1_input" 2>/dev/null || echo "N/A")
+    FAN2_RPM=$(cat "$HWMON_DIR/fan2_input" 2>/dev/null || echo "N/A")
+    
+    if [ "$i" -gt 0 ]; then
+        NOTIF_BODY="⏱️ Sisa Waktu: ${i} detik\n🌀 Fan 1: ${FAN1_RPM} RPM\n🌀 Fan 2: ${FAN2_RPM} RPM"
+    else
+        NOTIF_BODY="Mengembalikan kipas ke mode Auto..."
+    fi
+    
+    notify_cmd -r "$NOTIF_ID" "❄️ Cooling Laptop (100%)" "$NOTIF_BODY" -h int:value:"$PCT" -u normal
+    
+    PROG_LEN=20
+    FILLED=$(( (DURATION - i) * PROG_LEN / DURATION ))
+    BAR=""
+    for (( b=0; b<FILLED; b++ )); do BAR="${BAR}█"; done
+    for (( b=FILLED; b<PROG_LEN; b++ )); do BAR="${BAR}░"; done
+    
+    printf "\r❄️  [\033[1;36m%s\033[0m] \033[1;33m%2ds\033[0m | Fan1: \033[1;32m%5s RPM\033[0m | Fan2: \033[1;32m%5s RPM\033[0m" "$BAR" "$i" "$FAN1_RPM" "$FAN2_RPM"
+    
+    if [ "$i" -gt 0 ]; then
+        sleep 1 &
+        wait $!
+    fi
+done
+
