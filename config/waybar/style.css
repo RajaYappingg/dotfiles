@@ -57,7 +57,7 @@ window#waybar {
     font-size: 0px;
 }
 
-#tray:empty,
+#tray.empty,
 #tray.passive {
     margin: 0;
     padding: 0;
