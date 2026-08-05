@@ -471,7 +471,7 @@ hl.window_rule({
 
     float   = true,
     size    = "420 270",
-    center  = true,
+    move    = "cursor -380 35",
     opacity = "0.85 0.85",
 })
 
