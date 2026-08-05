@@ -508,14 +508,14 @@ hl.window_rule({
     name  = "firefox-opacity",
     match = { class = "firefox" },
 
-    opacity = "0.75 0.75",
+    opacity = "0.95 0.95",
 })
 
 hl.window_rule({
     name  = "firefox-caps-opacity",
     match = { class = "Firefox" },
 
-    opacity = "0.75 0.75",
+    opacity = "0.95 0.95",
 })
 
 hl.window_rule({
@@ -549,6 +549,20 @@ hl.window_rule({
     center  = true,
     size    = "860 560",
     opacity = "0.92 0.92",
+})
+
+hl.window_rule({
+    name  = "spotify-opacity",
+    match = { class = "Spotify" },
+
+    opacity = "0.80 0.80",
+})
+
+hl.window_rule({
+    name  = "spotify-opacity-lower",
+    match = { class = "spotify" },
+
+    opacity = "0.80 0.80",
 })
 
 
