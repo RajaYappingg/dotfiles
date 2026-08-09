@@ -1,0 +1,2 @@
+#!/bin/bash
+exec "/home/zaki/.local/bin/hydra.AppImage" "$@"

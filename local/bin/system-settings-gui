@@ -1,0 +1,1058 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import glob
+import json
+import threading
+import time
+import cairo
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
+
+_fan_hwmon_cache = None
+
+def find_fan_hwmon():
+    global _fan_hwmon_cache
+    if _fan_hwmon_cache and os.path.exists(_fan_hwmon_cache):
+        return _fan_hwmon_cache
+
+    for h in glob.glob("/sys/class/hwmon/hwmon*"):
+        name_path = os.path.join(h, "name")
+        if os.path.exists(name_path):
+            try:
+                with open(name_path, "r") as f:
+                    name = f.read().strip().lower()
+                if "acer" in name or os.path.exists(os.path.join(h, "pwm1")):
+                    _fan_hwmon_cache = h
+                    return h
+            except Exception:
+                pass
+    return None
+
+def get_fan_status():
+    hwmon = find_fan_hwmon()
+    if not hwmon:
+        return {
+            "cpu_rpm": 0, "cpu_percent": 0, "cpu_auto": True,
+            "gpu_rpm": 0, "gpu_percent": 0, "gpu_auto": True,
+            "available": False
+        }
+
+    res = {
+        "cpu_rpm": 0, "cpu_percent": 0, "cpu_auto": True,
+        "gpu_rpm": 0, "gpu_percent": 0, "gpu_auto": True,
+        "available": True
+    }
+
+    try:
+        f1 = os.path.join(hwmon, "fan1_input")
+        if os.path.exists(f1):
+            with open(f1, "r") as f:
+                res["cpu_rpm"] = int(f.read().strip())
+
+        p1 = os.path.join(hwmon, "pwm1")
+        if os.path.exists(p1):
+            with open(p1, "r") as f:
+                pwm = int(f.read().strip())
+                res["cpu_percent"] = int(round(pwm / 255.0 * 100))
+
+        pe1 = os.path.join(hwmon, "pwm1_enable")
+        if os.path.exists(pe1):
+            with open(pe1, "r") as f:
+                mode = int(f.read().strip())
+                res["cpu_auto"] = (mode == 2)
+
+        f2 = os.path.join(hwmon, "fan2_input")
+        if os.path.exists(f2):
+            with open(f2, "r") as f:
+                res["gpu_rpm"] = int(f.read().strip())
+
+        p2 = os.path.join(hwmon, "pwm2")
+        if os.path.exists(p2):
+            with open(p2, "r") as f:
+                pwm = int(f.read().strip())
+                res["gpu_percent"] = int(round(pwm / 255.0 * 100))
+
+        pe2 = os.path.join(hwmon, "pwm2_enable")
+        if os.path.exists(pe2):
+            with open(pe2, "r") as f:
+                mode = int(f.read().strip())
+                res["gpu_auto"] = (mode == 2)
+    except Exception:
+        pass
+
+    return res
+
+def set_fan_control(fan_type, percent=None, auto=False):
+    hwmon = find_fan_hwmon()
+    if not hwmon:
+        return
+
+    pwm_num = "1" if fan_type == "cpu" else "2"
+    pwm_file = os.path.join(hwmon, f"pwm{pwm_num}")
+    enable_file = os.path.join(hwmon, f"pwm{pwm_num}_enable")
+
+    commands = []
+    if auto:
+        commands.append((enable_file, "2"))
+    else:
+        if percent is not None:
+            pwm_val = str(max(0, min(255, int(round(percent * 2.55)))))
+            commands.append((enable_file, "1"))
+            commands.append((pwm_file, pwm_val))
+
+    for path, val in commands:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "w") as f:
+                f.write(val)
+        except PermissionError:
+            try:
+                subprocess.run(["sudo", "-n", "/home/zaki/.local/bin/setup-fan-permissions"], timeout=2)
+                with open(path, "w") as f:
+                    f.write(val)
+            except Exception:
+                try:
+                    subprocess.run(["pkexec", "sh", "-c", f"chmod 0666 {hwmon}/pwm*"], timeout=5)
+                    with open(path, "w") as f:
+                        f.write(val)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+CSS = b"""
+* {
+    font-family: "Inter", "JetBrainsMono Nerd Font", sans-serif;
+    outline: none;
+    box-shadow: none;
+}
+
+window.illogical-settings {
+    background-color: transparent;
+    color: #e2e8f0;
+}
+
+.outer-window-box {
+    background-color: #0d1117;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+}
+
+/* Header bar */
+.top-header {
+    padding: 14px 20px 10px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.top-header-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+button.header-icon-btn {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    font-size: 13px;
+    border-radius: 9999px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+}
+
+button.header-icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+/* Left Sidebar */
+.sidebar-box {
+    background-color: #12161f;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 16px 12px;
+    border-bottom-left-radius: 20px;
+}
+
+button.side-tab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 14px;
+    border-radius: 12px;
+    margin-bottom: 4px;
+    transition: all 0.15s ease;
+}
+
+button.side-tab-btn label {
+    color: #94a3b8;
+}
+
+button.side-tab-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+
+button.side-tab-btn.active {
+    background-color: #2563eb;
+    color: #ffffff;
+    border-color: #3b82f6;
+    font-weight: 700;
+}
+
+button.side-tab-btn.active label {
+    color: #ffffff;
+    font-weight: 700;
+}
+
+/* Sidebar User Profile Footer */
+.user-profile-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 8px 12px;
+    margin-top: 10px;
+}
+
+.user-name-lbl {
+    font-size: 12px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.user-sub-lbl {
+    font-size: 10.5px;
+    color: #64748b;
+}
+
+/* Content Area */
+.content-area {
+    padding: 22px 28px;
+}
+
+.section-header {
+    font-size: 20px;
+    font-weight: 800;
+    color: #f8fafc;
+    margin-bottom: 2px;
+}
+
+.section-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 18px;
+}
+
+/* Group Card Containers */
+.group-card {
+    background-color: #161b26;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 16px;
+}
+
+.group-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+/* Wi-Fi Row Items */
+.wifi-row-item {
+    background-color: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding: 10px 4px;
+}
+
+.setting-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.setting-desc {
+    font-size: 11.5px;
+    color: #64748b;
+}
+
+/* Connected Badge */
+.connected-badge {
+    background-color: rgba(37, 99, 235, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(37, 99, 235, 0.4);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+}
+
+/* Blue Action Buttons & Outline Connect Buttons */
+button.blue-action-btn {
+    background-color: #2563eb;
+    border: none;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 16px;
+    border-radius: 9999px;
+}
+
+button.blue-action-btn:hover {
+    background-color: #3b82f6;
+}
+
+button.outline-btn {
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 9999px;
+}
+
+button.outline-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+button.pill-btn {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 9999px;
+}
+
+button.pill-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+button.pill-btn.active {
+    background-color: #2563eb;
+    color: #ffffff;
+    border-color: #3b82f6;
+    font-weight: 700;
+}
+
+entry.wifi-pass-entry {
+    background-color: #161b26;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+entry.wifi-pass-entry:focus {
+    border-color: #38bdf8;
+}
+"""
+
+class IllogicalSettingsApp(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Settings")
+        self.set_name("illogical-settings")
+        self.set_wmclass("floating_sys_settings", "floating_sys_settings")
+        
+        self.set_default_size(860, 580)
+        self.set_size_request(760, 520)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_decorated(False)
+
+        self.set_app_paintable(True)
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+
+        self.connect("draw", self.on_draw)
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("destroy", Gtk.main_quit)
+
+        outer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer_box.get_style_context().add_class("outer-window-box")
+        self.add(outer_box)
+
+        # 1. Top Header
+        top_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        top_header.get_style_context().add_class("top-header")
+
+        btn_sidebar_toggle = Gtk.Button(label="󰍜")
+        btn_sidebar_toggle.get_style_context().add_class("header-icon-btn")
+
+        title_lbl = Gtk.Label(label="Settings")
+        title_lbl.get_style_context().add_class("top-header-title")
+        title_lbl.set_halign(Gtk.Align.CENTER)
+
+        btn_search = Gtk.Button(label="󰍉")
+        btn_search.get_style_context().add_class("header-icon-btn")
+
+        top_header.pack_start(btn_sidebar_toggle, False, False, 0)
+        top_header.pack_start(title_lbl, True, True, 0)
+        top_header.pack_end(btn_search, False, False, 0)
+        outer_box.pack_start(top_header, False, False, 0)
+
+        # 2. Main Content HBox (Sidebar + Right Content)
+        main_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        outer_box.pack_start(main_hbox, True, True, 0)
+
+        # Sidebar
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        sidebar.set_size_request(220, -1)
+        sidebar.get_style_context().add_class("sidebar-box")
+
+        self.categories = [
+            ("󰒓", "Quick", self.build_quick_settings),
+            ("󰍹", "Bar & screen", self.build_bar_screen),
+            ("󰕾", "Audio & Sound", self.build_audio_page),
+            ("󰤨", "Network & Wi-Fi", self.build_network_page),
+            ("󰈐", "Cooling & Fans", self.build_cooling_page),
+        ]
+
+        self.cat_buttons = []
+        for idx, (icon_char, title, builder_fn) in enumerate(self.categories):
+            btn = Gtk.Button()
+            btn.get_style_context().add_class("side-tab-btn")
+            btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            btn_box.set_halign(Gtk.Align.START)
+
+            lbl_icon = Gtk.Label(label=icon_char)
+            lbl_title = Gtk.Label(label=title)
+            btn_box.pack_start(lbl_icon, False, False, 0)
+            btn_box.pack_start(lbl_title, False, False, 0)
+
+            btn.add(btn_box)
+            btn.connect("clicked", lambda b, i=idx: self.switch_category(i))
+            sidebar.pack_start(btn, False, False, 0)
+            self.cat_buttons.append(btn)
+
+        # Spacer in sidebar
+        spacer = Gtk.Box()
+        sidebar.pack_start(spacer, True, True, 0)
+
+        # User Profile Footer Card
+        user_card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        user_card.get_style_context().add_class("user-profile-card")
+
+        user_avatar = Gtk.Label(label="👤")
+        user_info_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        lbl_uname = Gtk.Label(label="Muhammad Izzuddin Zaki")
+        lbl_uname.set_halign(Gtk.Align.START)
+        lbl_uname.get_style_context().add_class("user-name-lbl")
+
+        lbl_usub = Gtk.Label(label="m.zaki@example.com")
+        lbl_usub.set_halign(Gtk.Align.START)
+        lbl_usub.get_style_context().add_class("user-sub-lbl")
+
+        user_info_vbox.pack_start(lbl_uname, False, False, 0)
+        user_info_vbox.pack_start(lbl_usub, False, False, 0)
+
+        user_card.pack_start(user_avatar, False, False, 0)
+        user_card.pack_start(user_info_vbox, True, True, 0)
+        lbl_arrow = Gtk.Label(label="›")
+        lbl_arrow.get_style_context().add_class("user-sub-lbl")
+        user_card.pack_end(lbl_arrow, False, False, 0)
+
+        sidebar.pack_end(user_card, False, False, 0)
+        main_hbox.pack_start(sidebar, False, False, 0)
+
+        # Right Scroll Area
+        self.content_scrolled = Gtk.ScrolledWindow()
+        self.content_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        main_hbox.pack_start(self.content_scrolled, True, True, 0)
+
+        self.switch_category(0)
+
+    def switch_category(self, idx):
+        for i, btn in enumerate(self.cat_buttons):
+            if i == idx:
+                btn.get_style_context().add_class("active")
+            else:
+                btn.get_style_context().remove_class("active")
+
+        child = self.content_scrolled.get_child()
+        if child:
+            self.content_scrolled.remove(child)
+
+        _, _, builder_fn = self.categories[idx]
+        page_box = builder_fn()
+        page_box.get_style_context().add_class("content-area")
+        self.content_scrolled.add(page_box)
+        self.content_scrolled.show_all()
+
+
+
+    def build_quick_settings(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        lbl_sec = Gtk.Label(label="󰒓  Quick Settings")
+        lbl_sec.set_halign(Gtk.Align.START)
+        lbl_sec.get_style_context().add_class("section-header")
+        box.pack_start(lbl_sec, False, False, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        card.get_style_context().add_class("group-card")
+        
+        btn_super = Gtk.Button(label="Display Super App")
+        btn_super.get_style_context().add_class("blue-action-btn")
+        btn_super.connect("clicked", lambda b: subprocess.Popen(["/home/zaki/.local/bin/display-super-app"]))
+        card.pack_start(btn_super, False, False, 0)
+
+        box.pack_start(card, False, False, 0)
+        return box
+
+    def build_bar_screen(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        lbl_sec = Gtk.Label(label="󰍹  Bar & Screen Refresh Rate")
+        lbl_sec.set_halign(Gtk.Align.START)
+        lbl_sec.get_style_context().add_class("section-header")
+        box.pack_start(lbl_sec, False, False, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        card.get_style_context().add_class("group-card")
+
+        hz_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        btn_180 = Gtk.Button(label="Set 180Hz (External)")
+        btn_180.get_style_context().add_class("blue-action-btn")
+        btn_180.connect("clicked", lambda b: subprocess.Popen(["/home/zaki/.local/bin/monitor2-hz", "180"]))
+
+        btn_144 = Gtk.Button(label="Set 144Hz (Laptop)")
+        btn_144.get_style_context().add_class("pill-btn")
+        btn_144.connect("clicked", lambda b: subprocess.Popen(["/home/zaki/.local/bin/monitor2-hz", "144"]))
+
+        hz_hbox.pack_start(btn_180, False, False, 0)
+        hz_hbox.pack_start(btn_144, False, False, 0)
+
+        card.pack_start(hz_hbox, False, False, 0)
+        box.pack_start(card, False, False, 0)
+        return box
+
+    def build_audio_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        lbl_sec = Gtk.Label(label="󰕾  Audio Controls")
+        lbl_sec.set_halign(Gtk.Align.START)
+        lbl_sec.get_style_context().add_class("section-header")
+        box.pack_start(lbl_sec, False, False, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        card.get_style_context().add_class("group-card")
+
+        btn_pavu = Gtk.Button(label="Pavucontrol Audio Mixer")
+        btn_pavu.get_style_context().add_class("blue-action-btn")
+        btn_pavu.connect("clicked", lambda b: subprocess.Popen(["pavucontrol"]))
+
+        card.pack_start(btn_pavu, False, False, 0)
+        box.pack_start(card, False, False, 0)
+        return box
+
+    def build_network_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        
+        lbl_sec = Gtk.Label(label="󰤨  Network & Bluetooth Settings")
+        lbl_sec.set_halign(Gtk.Align.START)
+        lbl_sec.get_style_context().add_class("section-header")
+        box.pack_start(lbl_sec, False, False, 0)
+
+        # Section 1: Embedded Wi-Fi Scanner Card
+        wifi_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        wifi_card.get_style_context().add_class("group-card")
+
+        wifi_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_wifi_t = Gtk.Label(label="󰤨  Wi-Fi Networks")
+        lbl_wifi_t.set_halign(Gtk.Align.START)
+        lbl_wifi_t.get_style_context().add_class("group-title")
+
+        btn_rescan = Gtk.Button(label="󰑐 Scan Networks")
+        btn_rescan.get_style_context().add_class("pill-btn")
+        btn_rescan.connect("clicked", lambda b: threading.Thread(target=self.refresh_wifi_list, daemon=True).start())
+
+        wifi_hdr.pack_start(lbl_wifi_t, False, False, 0)
+        wifi_hdr.pack_end(btn_rescan, False, False, 0)
+        wifi_card.pack_start(wifi_hdr, False, False, 0)
+
+        # Wi-Fi List Box
+        self.wifi_list_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        wifi_card.pack_start(self.wifi_list_vbox, False, False, 0)
+
+        box.pack_start(wifi_card, False, False, 0)
+
+        # Section 2: Embedded Bluetooth Manager Card
+        bt_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        bt_card.get_style_context().add_class("group-card")
+
+        bt_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_bt_t = Gtk.Label(label="󰂯  Bluetooth Devices")
+        lbl_bt_t.set_halign(Gtk.Align.START)
+        lbl_bt_t.get_style_context().add_class("group-title")
+
+        btn_bt_app = Gtk.Button(label="Open Blueman Manager")
+        btn_bt_app.get_style_context().add_class("pill-btn")
+        btn_bt_app.connect("clicked", lambda b: subprocess.Popen(["blueman-manager"]))
+
+        bt_hdr.pack_start(lbl_bt_t, False, False, 0)
+        bt_hdr.pack_end(btn_bt_app, False, False, 0)
+        bt_card.pack_start(bt_hdr, False, False, 0)
+
+        self.bt_list_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        bt_card.pack_start(self.bt_list_vbox, False, False, 0)
+
+        box.pack_start(bt_card, False, False, 0)
+
+        # Trigger initial scans in background threads
+        threading.Thread(target=self.refresh_wifi_list, daemon=True).start()
+        threading.Thread(target=self.refresh_bt_list, daemon=True).start()
+        return box
+
+    def refresh_wifi_list(self):
+        networks = []
+        try:
+            res = subprocess.run(
+                ["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list"],
+                capture_output=True, text=True, timeout=4
+            )
+            seen_ssids = set()
+            for line in res.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.replace(r"\:", "__COLON__").split(":")
+                parts = [p.replace("__COLON__", ":") for p in parts]
+                if len(parts) >= 3:
+                    in_use = (parts[0] == "*")
+                    ssid = parts[1].strip()
+                    signal = parts[2].strip()
+                    security = parts[3].strip() if len(parts) > 3 else ""
+                    if ssid and (ssid not in seen_ssids or in_use):
+                        seen_ssids.add(ssid)
+                        networks.append({"in_use": in_use, "ssid": ssid, "signal": signal, "security": security})
+            networks.sort(key=lambda x: (not x["in_use"], -int(x["signal"]) if x["signal"].isdigit() else 0))
+        except Exception:
+            pass
+
+        GLib.idle_add(self._render_wifi_items, networks)
+
+    def _render_wifi_items(self, networks):
+        for child in self.wifi_list_vbox.get_children():
+            self.wifi_list_vbox.remove(child)
+
+        if not networks:
+            empty_lbl = Gtk.Label(label="No Wi-Fi networks found.")
+            empty_lbl.get_style_context().add_class("setting-desc")
+            self.wifi_list_vbox.pack_start(empty_lbl, False, False, 0)
+        else:
+            for net in networks[:6]:
+                outer_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+                outer_vbox.get_style_context().add_class("wifi-row-item")
+
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+
+                icon_str = "󰤨" if net["in_use"] else "󰤢"
+                lbl_icon = Gtk.Label()
+                lbl_icon.set_markup(f"<span foreground='{ '#38bdf8' if net['in_use'] else '#64748b' }' font='14'>{icon_str}</span>")
+                row.pack_start(lbl_icon, False, False, 0)
+
+                vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                
+                title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                lbl_ssid = Gtk.Label(label=net["ssid"])
+                lbl_ssid.set_halign(Gtk.Align.START)
+                lbl_ssid.get_style_context().add_class("setting-title")
+                title_box.pack_start(lbl_ssid, False, False, 0)
+
+                if net["in_use"]:
+                    badge = Gtk.Label(label="Connected")
+                    badge.get_style_context().add_class("connected-badge")
+                    badge.set_valign(Gtk.Align.CENTER)
+                    title_box.pack_start(badge, False, False, 0)
+
+                lbl_sub = Gtk.Label(label=f"Signal: {net['signal']}%  •  Security: {net['security'] or 'Open'}")
+                lbl_sub.set_halign(Gtk.Align.START)
+                lbl_sub.get_style_context().add_class("setting-desc")
+
+                vbox.pack_start(title_box, False, False, 0)
+                vbox.pack_start(lbl_sub, False, False, 0)
+                row.pack_start(vbox, True, True, 0)
+
+                # Expandable password entry box (Inline)
+                pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                pass_box.set_margin_top(6)
+                pass_box.set_margin_bottom(6)
+
+                pass_entry = Gtk.Entry()
+                pass_entry.set_visibility(False)
+                pass_entry.set_placeholder_text("Enter Wi-Fi password...")
+                pass_entry.get_style_context().add_class("wifi-pass-entry")
+                pass_entry.connect("activate", lambda e, s=net["ssid"], pb=pass_box: self.on_inline_join_clicked(s, e, pb))
+                pass_box.pack_start(pass_entry, True, True, 0)
+
+                btn_submit = Gtk.Button(label="Join")
+                btn_submit.get_style_context().add_class("blue-action-btn")
+                btn_submit.connect("clicked", lambda b, s=net["ssid"], e=pass_entry, pb=pass_box: self.on_inline_join_clicked(s, e, pb))
+                pass_box.pack_start(btn_submit, False, False, 0)
+
+                if net["in_use"]:
+                    chk_btn = Gtk.Label(label="✓")
+                    chk_btn.get_style_context().add_class("connected-badge")
+                    chk_btn.set_valign(Gtk.Align.CENTER)
+                    row.pack_end(chk_btn, False, False, 0)
+                else:
+                    btn_conn = Gtk.Button(label="Connect")
+                    btn_conn.get_style_context().add_class("outline-btn")
+                    btn_conn.connect("clicked", lambda b, pb=pass_box, e=pass_entry, s=net["ssid"], sec=net["security"]: self.handle_connect_click(s, sec, pb, e))
+                    row.pack_end(btn_conn, False, False, 0)
+
+                chev = Gtk.Label(label="›")
+                chev.get_style_context().add_class("setting-desc")
+                chev.set_valign(Gtk.Align.CENTER)
+                row.pack_end(chev, False, False, 0)
+
+                outer_vbox.pack_start(row, False, False, 0)
+                outer_vbox.pack_start(pass_box, False, False, 0)
+
+                self.wifi_list_vbox.pack_start(outer_vbox, False, False, 0)
+
+        self.wifi_list_vbox.show_all()
+        # Initially hide all password boxes after show_all
+        for child in self.wifi_list_vbox.get_children():
+            # child is outer_vbox
+            children = child.get_children()
+            if len(children) > 1:
+                children[1].hide()
+
+    def handle_connect_click(self, ssid, security, pass_box, pass_entry):
+        is_secured = security and security != "--" and security != ""
+        if not is_secured:
+            threading.Thread(target=self._do_wifi_connect, args=(ssid, None), daemon=True).start()
+        else:
+            if pass_box.is_visible():
+                pass_box.hide()
+            else:
+                pass_box.show()
+                pass_box.show_all()
+                pass_entry.grab_focus()
+
+    def on_inline_join_clicked(self, ssid, pass_entry, pass_box):
+        password = pass_entry.get_text().strip()
+        pass_box.hide()
+        threading.Thread(target=self._do_wifi_connect, args=(ssid, password if password else None), daemon=True).start()
+
+    def _do_wifi_connect(self, ssid, password):
+        cmd = ["nmcli", "dev", "wifi", "connect", ssid]
+        if password:
+            cmd.extend(["password", password])
+        subprocess.run(cmd, capture_output=True, text=True)
+        time.sleep(1)
+        self.refresh_wifi_list()
+
+    def refresh_bt_list(self):
+        devices = []
+        try:
+            res = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True, timeout=3)
+            for line in res.stdout.strip().split("\n"):
+                if line.startswith("Device "):
+                    parts = line.split(" ", 2)
+                    if len(parts) >= 3:
+                        devices.append({"mac": parts[1], "name": parts[2]})
+        except Exception:
+            pass
+
+        GLib.idle_add(self._render_bt_items, devices)
+
+    def _render_bt_items(self, devices):
+        for child in self.bt_list_vbox.get_children():
+            self.bt_list_vbox.remove(child)
+
+        if not devices:
+            empty_lbl = Gtk.Label(label="No paired Bluetooth devices found.")
+            empty_lbl.get_style_context().add_class("setting-desc")
+            self.bt_list_vbox.pack_start(empty_lbl, False, False, 0)
+        else:
+            for dev in devices[:5]:
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                row.get_style_context().add_class("wifi-row-item")
+
+                lbl_icon = Gtk.Label()
+                lbl_icon.set_markup("<span foreground='#64748b' font='14'>󰂯</span>")
+                row.pack_start(lbl_icon, False, False, 0)
+
+                vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                lbl_name = Gtk.Label(label=dev["name"])
+                lbl_name.set_halign(Gtk.Align.START)
+                lbl_name.get_style_context().add_class("setting-title")
+
+                lbl_mac = Gtk.Label(label=f"MAC: {dev['mac']}")
+                lbl_mac.set_halign(Gtk.Align.START)
+                lbl_mac.get_style_context().add_class("setting-desc")
+
+                vbox.pack_start(lbl_name, False, False, 0)
+                vbox.pack_start(lbl_mac, False, False, 0)
+                row.pack_start(vbox, True, True, 0)
+
+                btn_conn = Gtk.Button(label="Connect")
+                btn_conn.get_style_context().add_class("outline-btn")
+                btn_conn.connect("clicked", lambda b, m=dev["mac"]: subprocess.Popen(["bluetoothctl", "connect", m]))
+                row.pack_end(btn_conn, False, False, 0)
+
+                chev = Gtk.Label(label="›")
+                chev.get_style_context().add_class("setting-desc")
+                chev.set_valign(Gtk.Align.CENTER)
+                row.pack_end(chev, False, False, 0)
+
+                self.bt_list_vbox.pack_start(row, False, False, 0)
+
+        self.bt_list_vbox.show_all()
+
+    def build_cooling_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        lbl_sec = Gtk.Label(label="󰈐  Cooling & Fan Speed")
+        lbl_sec.set_halign(Gtk.Align.START)
+        lbl_sec.get_style_context().add_class("section-header")
+        box.pack_start(lbl_sec, False, False, 0)
+
+        fan_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        fan_card.get_style_context().add_class("group-card")
+
+        # Row 1: CPU Fan
+        cpu_fan_hdr_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_cpu_title = Gtk.Label()
+        lbl_cpu_title.set_markup("<span foreground='#38bdf8' font='12'><b>CPU Fan Speed</b></span>")
+        lbl_cpu_title.set_halign(Gtk.Align.START)
+
+        self.lbl_cpu_rpm = Gtk.Label(label="-- RPM")
+        self.lbl_cpu_rpm.get_style_context().add_class("setting-desc")
+        self.lbl_cpu_rpm.set_halign(Gtk.Align.START)
+
+        cpu_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        self.btn_cpu_auto = Gtk.Button(label="AUTO")
+        self.btn_cpu_auto.get_style_context().add_class("fan-auto-btn")
+        self.btn_cpu_auto.connect("clicked", self.on_cpu_auto_clicked)
+
+        self.btn_cpu_max = Gtk.Button(label="MAX")
+        self.btn_cpu_max.get_style_context().add_class("fan-max-btn")
+        self.btn_cpu_max.connect("clicked", self.on_cpu_max_clicked)
+
+        cpu_btn_box.pack_start(self.btn_cpu_auto, False, False, 0)
+        cpu_btn_box.pack_start(self.btn_cpu_max, False, False, 0)
+
+        cpu_fan_hdr_box.pack_start(lbl_cpu_title, False, False, 0)
+        cpu_fan_hdr_box.pack_start(self.lbl_cpu_rpm, True, True, 0)
+        cpu_fan_hdr_box.pack_end(cpu_btn_box, False, False, 0)
+
+        cpu_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_cpu_icon = Gtk.Label()
+        lbl_cpu_icon.set_markup("<span foreground='#38bdf8' font='14'>󰈐</span>")
+
+        self.scale_cpu_fan = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.scale_cpu_fan.set_draw_value(False)
+        self.scale_cpu_fan.connect("value-changed", self.on_cpu_fan_slider_changed)
+
+        self.lbl_cpu_fan_val = Gtk.Label(label="Auto")
+        self.lbl_cpu_fan_val.set_halign(Gtk.Align.END)
+        self.lbl_cpu_fan_val.get_style_context().add_class("setting-desc")
+
+        cpu_box.pack_start(lbl_cpu_icon, False, False, 0)
+        cpu_box.pack_start(self.scale_cpu_fan, True, True, 0)
+        cpu_box.pack_start(self.lbl_cpu_fan_val, False, False, 0)
+
+        fan_card.pack_start(cpu_fan_hdr_box, False, False, 0)
+        fan_card.pack_start(cpu_box, False, False, 0)
+
+        # Separator line
+        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        fan_card.pack_start(sep, False, False, 0)
+
+        # Row 2: GPU Fan
+        gpu_fan_hdr_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_gpu_title = Gtk.Label()
+        lbl_gpu_title.set_markup("<span foreground='#f87171' font='12'><b>GPU Fan Speed</b></span>")
+        lbl_gpu_title.set_halign(Gtk.Align.START)
+
+        self.lbl_gpu_rpm = Gtk.Label(label="-- RPM")
+        self.lbl_gpu_rpm.get_style_context().add_class("setting-desc")
+        self.lbl_gpu_rpm.set_halign(Gtk.Align.START)
+
+        gpu_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        self.btn_gpu_auto = Gtk.Button(label="AUTO")
+        self.btn_gpu_auto.get_style_context().add_class("fan-auto-btn")
+        self.btn_gpu_auto.connect("clicked", self.on_gpu_auto_clicked)
+
+        self.btn_gpu_max = Gtk.Button(label="MAX")
+        self.btn_gpu_max.get_style_context().add_class("fan-max-btn")
+        self.btn_gpu_max.connect("clicked", self.on_gpu_max_clicked)
+
+        gpu_btn_box.pack_start(self.btn_gpu_auto, False, False, 0)
+        gpu_btn_box.pack_start(self.btn_gpu_max, False, False, 0)
+
+        gpu_fan_hdr_box.pack_start(lbl_gpu_title, False, False, 0)
+        gpu_fan_hdr_box.pack_start(self.lbl_gpu_rpm, True, True, 0)
+        gpu_fan_hdr_box.pack_end(gpu_btn_box, False, False, 0)
+
+        gpu_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_gpu_icon = Gtk.Label()
+        lbl_gpu_icon.set_markup("<span foreground='#f87171' font='14'>󰈐</span>")
+
+        self.scale_gpu_fan = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.scale_gpu_fan.set_draw_value(False)
+        self.scale_gpu_fan.connect("value-changed", self.on_gpu_fan_slider_changed)
+
+        self.lbl_gpu_fan_val = Gtk.Label(label="Auto")
+        self.lbl_gpu_fan_val.set_halign(Gtk.Align.END)
+        self.lbl_gpu_fan_val.get_style_context().add_class("setting-desc")
+
+        gpu_box.pack_start(lbl_gpu_icon, False, False, 0)
+        gpu_box.pack_start(self.scale_gpu_fan, True, True, 0)
+        gpu_box.pack_start(self.lbl_gpu_fan_val, False, False, 0)
+
+        fan_card.pack_start(gpu_fan_hdr_box, False, False, 0)
+        fan_card.pack_start(gpu_box, False, False, 0)
+
+        box.pack_start(fan_card, False, False, 0)
+
+        # Extra button to open standalone cooling app
+        btn_cool = Gtk.Button(label="Open Standalone Predator Cooling GUI")
+        btn_cool.get_style_context().add_class("blue-action-btn")
+        btn_cool.connect("clicked", lambda b: subprocess.Popen(["/home/zaki/.local/bin/cooling"]))
+        box.pack_start(btn_cool, False, False, 0)
+
+        # Trigger initial UI update
+        self.update_fan_ui()
+        return box
+
+    def on_cpu_fan_slider_changed(self, scale):
+        if getattr(self, "_updating_sliders", False):
+            return
+        val = int(scale.get_value())
+        self.lbl_cpu_fan_val.set_text(f"{val}%")
+        self.btn_cpu_auto.get_style_context().remove_class("active-auto")
+        if val >= 99:
+            self.btn_cpu_max.get_style_context().add_class("active-max")
+        else:
+            self.btn_cpu_max.get_style_context().remove_class("active-max")
+        set_fan_control("cpu", percent=val, auto=False)
+
+    def on_gpu_fan_slider_changed(self, scale):
+        if getattr(self, "_updating_sliders", False):
+            return
+        val = int(scale.get_value())
+        self.lbl_gpu_fan_val.set_text(f"{val}%")
+        self.btn_gpu_auto.get_style_context().remove_class("active-auto")
+        if val >= 99:
+            self.btn_gpu_max.get_style_context().add_class("active-max")
+        else:
+            self.btn_gpu_max.get_style_context().remove_class("active-max")
+        set_fan_control("gpu", percent=val, auto=False)
+
+    def on_cpu_auto_clicked(self, btn):
+        set_fan_control("cpu", auto=True)
+        self.update_fan_ui()
+
+    def on_gpu_auto_clicked(self, btn):
+        set_fan_control("gpu", auto=True)
+        self.update_fan_ui()
+
+    def on_cpu_max_clicked(self, btn):
+        set_fan_control("cpu", percent=100, auto=False)
+        self.update_fan_ui()
+
+    def on_gpu_max_clicked(self, btn):
+        set_fan_control("gpu", percent=100, auto=False)
+        self.update_fan_ui()
+
+    def update_fan_ui(self):
+        status = get_fan_status()
+        if not status["available"]:
+            return
+
+        self._updating_sliders = True
+        try:
+            if status["cpu_rpm"] > 0:
+                self.lbl_cpu_rpm.set_text(f"{status['cpu_rpm']} RPM")
+            else:
+                self.lbl_cpu_rpm.set_text("0 RPM")
+
+            if status["cpu_auto"]:
+                self.btn_cpu_auto.get_style_context().add_class("active-auto")
+                self.btn_cpu_max.get_style_context().remove_class("active-max")
+                self.scale_cpu_fan.set_value(status["cpu_percent"])
+                self.lbl_cpu_fan_val.set_text("Auto")
+            else:
+                self.btn_cpu_auto.get_style_context().remove_class("active-auto")
+                self.scale_cpu_fan.set_value(status["cpu_percent"])
+                self.lbl_cpu_fan_val.set_text(f"{status['cpu_percent']}%")
+                if status["cpu_percent"] >= 99:
+                    self.btn_cpu_max.get_style_context().add_class("active-max")
+                else:
+                    self.btn_cpu_max.get_style_context().remove_class("active-max")
+
+            if status["gpu_rpm"] > 0:
+                self.lbl_gpu_rpm.set_text(f"{status['gpu_rpm']} RPM")
+            else:
+                self.lbl_gpu_rpm.set_text("0 RPM")
+
+            if status["gpu_auto"]:
+                self.btn_gpu_auto.get_style_context().add_class("active-auto")
+                self.btn_gpu_max.get_style_context().remove_class("active-max")
+                self.scale_gpu_fan.set_value(status["gpu_percent"])
+                self.lbl_gpu_fan_val.set_text("Auto")
+            else:
+                self.btn_gpu_auto.get_style_context().remove_class("active-auto")
+                self.scale_gpu_fan.set_value(status["gpu_percent"])
+                self.lbl_gpu_fan_val.set_text(f"{status['gpu_percent']}%")
+                if status["gpu_percent"] >= 99:
+                    self.btn_gpu_max.get_style_context().add_class("active-max")
+                else:
+                    self.btn_gpu_max.get_style_context().remove_class("active-max")
+        finally:
+            self._updating_sliders = False
+
+
+
+    def load_wallpaper_thumbnail(self, gtk_image):
+        try:
+            wallpapers = glob.glob("/home/zaki/Pictures/wallpapers/*") + glob.glob("/home/zaki/Pictures/*")
+            if wallpapers:
+                path = wallpapers[0]
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 240, 135, True)
+                gtk_image.set_from_pixbuf(pixbuf)
+        except Exception:
+            pass
+
+    def on_draw(self, widget, cr):
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        return False
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.destroy()
+            return True
+        return False
+
+if __name__ == "__main__":
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(),
+        css_provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+
+    app = IllogicalSettingsApp()
+    app.show_all()
+    Gtk.main()

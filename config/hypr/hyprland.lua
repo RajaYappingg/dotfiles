@@ -597,3 +597,6 @@ hl.bind(mainMod .. " + ALT + H", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2
 hl.bind(mainMod .. " + ALT + 1", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz 60")) -- Monitor 2: Quick Set 60Hz
 hl.bind(mainMod .. " + ALT + 2", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz 144")) -- Monitor 2: Quick Set 144Hz
 hl.bind(mainMod .. " + ALT + 3", hl.dsp.exec_cmd("/home/zaki/.local/bin/monitor2-hz 180")) -- Monitor 2: Quick Set 180Hz
+
+-- GAME MODE TOGGLE SHORTCUT (SUPER + G)
+hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("/home/zaki/.local/bin/game-mode"))

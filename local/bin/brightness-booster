@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+# State file untuk menyimpan level persen
+STATE_FILE="$HOME/.cache/brightness_boost.level"
+mkdir -p "$HOME/.cache"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "100" > "$STATE_FILE"
+fi
+
+CURRENT=$(cat "$STATE_FILE")
+
+send_notification() {
+    LEVEL=$1
+    if [ "$LEVEL" -eq 100 ]; then
+        TEXT="Normal (100% Backlight Hardware)"
+    elif [ "$LEVEL" -gt 100 ]; then
+        TEXT="🚀 Software Boost: ${LEVEL}% (Digital Overdrive)"
+    else
+        TEXT="Backlight: ${LEVEL}%"
+    fi
+    notify-send -r 9999 -t 1500 -h int:value:$((LEVEL > 100 ? 100 : LEVEL)) "☀️ Brightness Booster" "$TEXT"
+}
+
+set_level() {
+    TARGET=$1
+
+    if [ "$TARGET" -le 100 ]; then
+        # Mengatur kecerahan fisik layar (Hardware Backlight)
+        brightnessctl set "${TARGET}%" >/dev/null 2>&1
+    else
+        # Memastikan kecerahan hardware pada 100% maksimum
+        brightnessctl set "100%" >/dev/null 2>&1
+    fi
+
+    echo "$TARGET" > "$STATE_FILE"
+    send_notification "$TARGET"
+}
+
+case "$1" in
+    up|+)
+        if [ "$CURRENT" -lt 200 ]; then
+            NEW=$((CURRENT + 10))
+            set_level "$NEW"
+        else
+            send_notification 200
+        fi
+        ;;
+    down|-)
+        if [ "$CURRENT" -gt 10 ]; then
+            NEW=$((CURRENT - 10))
+            set_level "$NEW"
+        else
+            send_notification 10
+        fi
+        ;;
+    reset|normal)
+        set_level 100
+        ;;
+    max|ultra)
+        set_level 200
+        ;;
+    status)
+        echo "Current Level: ${CURRENT}%"
+        ;;
+    *)
+        echo "Usage: brightness-booster {up|down|reset|max|status}"
+        echo ""
+        echo "Contoh:"
+        echo "  brightness-booster up      : Naikkan kecerahan 10% (Bisa melebihi 100%)"
+        echo "  brightness-booster down    : Turunkan kecerahan 10%"
+        echo "  brightness-booster reset   : Kembalikan ke 100% Normal"
+        echo "  brightness-booster max     : Kecerahan Ultra 200%"
+        ;;
+esac

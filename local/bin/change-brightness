@@ -1,74 +1,58 @@
-#!/usr/bin/env python3
-import os
-import sys
-import glob
-import subprocess
+#!/usr/bin/env bash
+# Brightness Booster Script (Up to 200% Overdrive)
 
-BRIGHTNESS_FILE = "/tmp/.brightness_level"
+ACTION="$1"
 
-def get_current_brightness():
-    try:
-        if os.path.exists(BRIGHTNESS_FILE):
-            with open(BRIGHTNESS_FILE, "r") as f:
-                return int(f.read().strip())
-    except Exception:
-        pass
+get_current_b() {
+    b_file="/tmp/.brightness_level"
+    if [ -f "$b_file" ]; then
+        cat "$b_file"
+    else
+        curr=$(brightnessctl -q g 2>/dev/null)
+        max_b=$(brightnessctl -q m 2>/dev/null)
+        if [ -n "$curr" ] && [ -n "$max_b" ]; then
+            python3 -c "print(int(($curr / $max_b) * 100))"
+        else
+            echo "100"
+        fi
+    fi
+}
 
-    try:
-        dirs = glob.glob('/sys/class/backlight/*')
-        if dirs:
-            dev = dirs[0]
-            with open(os.path.join(dev, 'brightness'), 'r') as f:
-                curr = int(f.read().strip())
-            with open(os.path.join(dev, 'max_brightness'), 'r') as f:
-                max_b = int(f.read().strip())
-            return int((curr / max_b) * 100)
-    except Exception:
-        pass
-    return 100
+set_brightness() {
+    target=$1
+    if [ "$target" -gt 200 ]; then target=200; fi
+    if [ "$target" -lt 10 ]; then target=10; fi
 
-def set_brightness(val):
-    val = max(10, min(100, int(val)))
-    try:
-        with open(BRIGHTNESS_FILE, "w") as f:
-            f.write(str(val))
-    except Exception:
-        pass
+    echo "$target" > "/tmp/.brightness_level"
 
-    # 1. Hardware backlight via brightnessctl
-    try:
-        subprocess.Popen(['brightnessctl', '-q', 'set', f'{val}%'])
-    except Exception:
-        pass
+    hw_val=$target
+    if [ "$hw_val" -gt 100 ]; then hw_val=100; fi
+    brightnessctl -q set "${hw_val}%" 2>/dev/null || true
 
-    # 2. Systemd logind call
-    try:
-        dirs = glob.glob('/sys/class/backlight/*')
-        for dev in dirs:
-            dev_name = os.path.basename(dev)
-            with open(os.path.join(dev, 'max_brightness'), 'r') as f:
-                max_b = int(f.read().strip())
-            target = max(1, int((val / 100.0) * max_b))
-            subprocess.Popen(['busctl', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1/session/auto', 'org.freedesktop.login1.Session', 'SetBrightness', 'ssu', 'backlight', dev_name, str(target)])
-    except Exception:
-        pass
+    status="NORMAL"
+    if [ "$target" -gt 100 ]; then
+        status="OVERDRIVE 🚀 (200% MAX)"
+    fi
 
-def main():
-    if len(sys.argv) < 2:
-        return
-    arg = sys.argv[1]
-    curr = get_current_brightness()
-    if arg.startswith("+"):
-        diff = int(arg[1:])
-        set_brightness(curr + diff)
-    elif arg.startswith("-"):
-        diff = int(arg[1:])
-        set_brightness(curr - diff)
-    else:
-        try:
-            set_brightness(int(arg))
-        except ValueError:
-            pass
+    notify-send -h "int:value:$target" -h "string:synchronous:brightness" "Brightness: ${target}% [$status]" -t 1500
+}
 
-if __name__ == "__main__":
-    main()
+curr=$(get_current_b)
+
+case "$ACTION" in
+    "+5"|"+10"|"+15"|"+20")
+        inc=${ACTION#+}
+        set_brightness $((curr + inc))
+        ;;
+    "-5"|"-10"|"-15"|"-20")
+        dec=${ACTION#-}
+        set_brightness $((curr - dec))
+        ;;
+    *)
+        if [[ "$ACTION" =~ ^[0-9]+$ ]]; then
+            set_brightness "$ACTION"
+        else
+            echo "Usage: change-brightness [+5|-5|100|200]"
+        fi
+        ;;
+esac

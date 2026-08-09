@@ -1,0 +1,386 @@
+#!/usr/bin/env python3
+"""
+mycursor - Automatic Cursor Theme Switcher for Linux (Hyprland / GTK / X11)
+Author: Antigravity AI
+"""
+
+import os
+import sys
+import argparse
+import pathlib
+import shutil
+import tarfile
+import zipfile
+import subprocess
+import configparser
+
+PICTURES_CURSOR_DIR = pathlib.Path.home() / "Pictures" / "cursor"
+USER_ICONS_DIR = pathlib.Path.home() / ".local" / "share" / "icons"
+USER_DOT_ICONS_DIR = pathlib.Path.home() / ".icons"
+SYS_ICONS_DIR = pathlib.Path("/usr/share/icons")
+VENV_PYTHON = pathlib.Path.home() / ".local" / "share" / "mycursor-venv" / "bin" / "python"
+CONVERTER_SCRIPT = pathlib.Path.home() / ".local" / "bin" / "convert_yixuan.py"
+
+def get_current_cursor():
+    """Get current cursor theme and size from gsettings."""
+    theme = "default"
+    size = "24"
+    try:
+        res = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "cursor-theme"],
+            capture_output=True, text=True
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            theme = res.stdout.strip().strip("'\"")
+    except Exception:
+        pass
+    
+    try:
+        res = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "cursor-size"],
+            capture_output=True, text=True
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            size = res.stdout.strip().strip("'\"")
+    except Exception:
+        pass
+        
+    return theme, size
+
+def auto_process_cursor_dir():
+    """Extract archives and convert Windows .ani/.cur cursors in ~/Pictures/cursor."""
+    if not PICTURES_CURSOR_DIR.exists():
+        PICTURES_CURSOR_DIR.mkdir(parents=True, exist_ok=True)
+        return
+
+    # Extract archives
+    for item in list(PICTURES_CURSOR_DIR.iterdir()):
+        if item.is_file():
+            extracted = False
+            name_lower = item.name.lower()
+            try:
+                if name_lower.endswith(".tar.gz") or name_lower.endswith(".tar.xz") or name_lower.endswith(".tar.bz2") or name_lower.endswith(".tgz"):
+                    with tarfile.open(item, "r:*") as tar:
+                        tar.extractall(path=PICTURES_CURSOR_DIR)
+                    extracted = True
+                elif name_lower.endswith(".zip"):
+                    with zipfile.ZipFile(item, 'r') as zip_ref:
+                        zip_ref.extractall(PICTURES_CURSOR_DIR)
+                    extracted = True
+
+                if extracted:
+                    print(f"📦 Extracted archive: {item.name}")
+                    item.unlink()
+            except Exception as e:
+                print(f"⚠️ Warning: Could not extract {item.name}: {e}")
+
+    # Run Windows cursor converter if .ani or .cur files are detected
+    if VENV_PYTHON.exists() and CONVERTER_SCRIPT.exists():
+        try:
+            subprocess.run([str(VENV_PYTHON), str(CONVERTER_SCRIPT)], capture_output=True, text=True)
+        except Exception:
+            pass
+
+def scan_cursor_themes():
+    """Scan ~/Pictures/cursor, ~/.local/share/icons, ~/.icons, and /usr/share/icons for cursor themes."""
+    auto_process_cursor_dir()
+    
+    themes = {} # { theme_name: { 'path': Path, 'source': str } }
+    
+    def scan_dir(base_dir, source_label):
+        if not base_dir.exists():
+            return
+        for item in base_dir.iterdir():
+            if item.is_dir():
+                if (item / "cursors").is_dir():
+                    if item.name not in themes:
+                        themes[item.name] = { 'path': item, 'source': source_label }
+                else:
+                    for subitem in item.iterdir():
+                        if subitem.is_dir() and (subitem / "cursors").is_dir():
+                            if subitem.name not in themes:
+                                themes[subitem.name] = { 'path': subitem, 'source': source_label }
+
+    scan_dir(PICTURES_CURSOR_DIR, "Pictures/cursor")
+    scan_dir(USER_ICONS_DIR, "User Icons")
+    scan_dir(USER_DOT_ICONS_DIR, "User Icons")
+    scan_dir(SYS_ICONS_DIR, "System Icons")
+    
+    return themes
+
+def apply_cursor_theme(theme_name, theme_info=None, size=24):
+    """Apply the cursor theme across Hyprland, GTK, X11, and configuration files."""
+    if theme_info is None:
+        themes = scan_cursor_themes()
+        theme_info = themes.get(theme_name, {'path': None, 'source': 'Unknown'})
+        
+    source_path = theme_info.get('path')
+    
+    USER_ICONS_DIR.mkdir(parents=True, exist_ok=True)
+    USER_DOT_ICONS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    if source_path and source_path.exists():
+        for target_dir in [USER_ICONS_DIR, USER_DOT_ICONS_DIR]:
+            target = target_dir / theme_name
+            if target != source_path:
+                if target.is_symlink() or target.exists():
+                    try:
+                        if target.is_symlink():
+                            target.unlink()
+                        elif target.is_dir():
+                            shutil.rmtree(target)
+                    except Exception:
+                        pass
+                try:
+                    target.symlink_to(source_path)
+                except Exception:
+                    try:
+                        shutil.copytree(source_path, target)
+                    except Exception:
+                        pass
+
+    # Hyprland live update
+    try:
+        subprocess.run(["hyprctl", "setcursor", theme_name, str(size)], check=False, capture_output=True)
+    except Exception:
+        pass
+
+    # GSettings (GNOME / GTK)
+    try:
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "cursor-theme", theme_name], check=False, capture_output=True)
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "cursor-size", str(size)], check=False, capture_output=True)
+    except Exception:
+        pass
+
+    # ~/.icons/default/index.theme
+    default_dir = USER_DOT_ICONS_DIR / "default"
+    default_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(default_dir / "index.theme", "w") as f:
+            f.write(f"[Icon Theme]\nName=Default\nComment=Default Cursor Theme\nInherits={theme_name}\n")
+    except Exception:
+        pass
+
+    # GTK 3 & GTK 4 settings.ini
+    for gtk_ver in ["gtk-3.0", "gtk-4.0"]:
+        config_dir = pathlib.Path.home() / ".config" / gtk_ver
+        config_dir.mkdir(parents=True, exist_ok=True)
+        ini_file = config_dir / "settings.ini"
+        
+        parser = configparser.ConfigParser()
+        if ini_file.exists():
+            try:
+                parser.read(ini_file)
+            except Exception:
+                pass
+        if 'Settings' not in parser:
+            parser['Settings'] = {}
+            
+        parser['Settings']['gtk-cursor-theme-name'] = theme_name
+        parser['Settings']['gtk-cursor-theme-size'] = str(size)
+        
+        try:
+            with open(ini_file, 'w') as f:
+                parser.write(f)
+        except Exception:
+            pass
+
+    # ~/.Xresources
+    xres = pathlib.Path.home() / ".Xresources"
+    try:
+        lines = []
+        if xres.exists():
+            with open(xres, 'r') as f:
+                lines = f.readlines()
+        new_lines = [l for l in lines if not (l.startswith("Xcursor.theme:") or l.startswith("Xcursor.size:"))]
+        new_lines.append(f"Xcursor.theme: {theme_name}\n")
+        new_lines.append(f"Xcursor.size: {size}\n")
+        with open(xres, 'w') as f:
+            f.writelines(new_lines)
+    except Exception:
+        pass
+
+    # Desktop notification
+    try:
+        subprocess.run(["notify-send", "-i", "input-mouse", "mycursor", f"Cursor updated: {theme_name} ({size}px)"], check=False, capture_output=True)
+    except Exception:
+        pass
+
+def run_curses_ui(stdscr):
+    """Interactive TUI menu using curses."""
+    import curses
+    
+    curses.curs_set(0)
+    curses.use_default_colors()
+    
+    try:
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        curses.init_pair(2, curses.COLOR_GREEN, -1)
+        curses.init_pair(3, curses.COLOR_YELLOW, -1)
+        curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(5, curses.COLOR_MAGENTA, -1)
+    except Exception:
+        pass
+
+    current_theme, current_size = get_current_cursor()
+    cursor_size = int(current_size) if current_size.isdigit() else 24
+    
+    themes = scan_cursor_themes()
+    theme_names = sorted(list(themes.keys()))
+    
+    if not theme_names:
+        stdscr.clear()
+        stdscr.addstr(1, 2, "❌ No cursor themes found in ~/Pictures/cursor or system directories!", curses.A_BOLD)
+        stdscr.addstr(3, 2, "Place cursor packs (folders or .zip/.tar.gz) in ~/Pictures/cursor and try again.")
+        stdscr.addstr(5, 2, "Press any key to exit...")
+        stdscr.refresh()
+        stdscr.getch()
+        return
+
+    selected_idx = 0
+    if current_theme in theme_names:
+        selected_idx = theme_names.index(current_theme)
+
+    msg = ""
+
+    while True:
+        stdscr.clear()
+        height, width = stdscr.getmaxyx()
+        
+        title = " 🖱️ MYCURSOR - AUTOMATIC CURSOR SWITCHER "
+        stdscr.addstr(0, max(0, (width - len(title)) // 2), title, curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
+        
+        status = f" Current Active: {current_theme} ({cursor_size}px) "
+        stdscr.addstr(2, 2, status, curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(3, 2, f" Scan Path: {PICTURES_CURSOR_DIR}", curses.color_pair(3))
+        stdscr.addstr(4, 2, "─" * (width - 4))
+        
+        instructions = "[↑/↓ or j/k] Navigate | [Enter] Apply | [s] Change Size | [r] Rescan | [q] Quit"
+        stdscr.addstr(height - 2, 2, instructions, curses.color_pair(5))
+        
+        if msg:
+            stdscr.addstr(height - 3, 2, msg, curses.color_pair(2) | curses.A_BOLD)
+
+        max_display = height - 9
+        start_idx = max(0, selected_idx - max_display // 2)
+        end_idx = min(len(theme_names), start_idx + max_display)
+
+        for idx in range(start_idx, end_idx):
+            name = theme_names[idx]
+            info = themes[name]
+            source = info['source']
+            y = 5 + (idx - start_idx)
+            
+            is_active = (name == current_theme)
+            active_marker = " (Active)" if is_active else ""
+            
+            line_str = f" {idx + 1:2d}. {name:<30} [{source}]{active_marker}"
+            line_str = line_str[:width - 4]
+            
+            if idx == selected_idx:
+                stdscr.addstr(y, 2, line_str.ljust(width - 4), curses.color_pair(4) | curses.A_BOLD)
+            else:
+                attr = curses.color_pair(2) if is_active else curses.A_NORMAL
+                stdscr.addstr(y, 2, line_str, attr)
+
+        stdscr.refresh()
+        
+        key = stdscr.getch()
+
+        if key in [ord('q'), ord('Q'), 27]:
+            break
+        elif key in [curses.KEY_UP, ord('k'), ord('K')]:
+            selected_idx = (selected_idx - 1) % len(theme_names)
+            msg = ""
+        elif key in [curses.KEY_DOWN, ord('j'), ord('J')]:
+            selected_idx = (selected_idx + 1) % len(theme_names)
+            msg = ""
+        elif key in [ord('r'), ord('R')]:
+            themes = scan_cursor_themes()
+            theme_names = sorted(list(themes.keys()))
+            selected_idx = min(selected_idx, len(theme_names) - 1)
+            msg = "🔄 Rescanned cursor directory!"
+        elif key in [ord('s'), ord('S')]:
+            sizes = [16, 24, 32, 48, 64]
+            curr_pos = sizes.index(cursor_size) if cursor_size in sizes else 1
+            cursor_size = sizes[(curr_pos + 1) % len(sizes)]
+            msg = f"📏 Cursor size set to {cursor_size}px (Press Enter to apply)"
+        elif key in [10, 13, curses.KEY_ENTER]:
+            target_name = theme_names[selected_idx]
+            apply_cursor_theme(target_name, themes[target_name], size=cursor_size)
+            current_theme = target_name
+            current_size = str(cursor_size)
+            msg = f"✅ Applied cursor: {target_name} ({cursor_size}px)!"
+
+def run_cli_fallback_menu():
+    print("\n=========================================")
+    print(" 🖱️ MYCURSOR - AUTOMATIC CURSOR SWITCHER ")
+    print("=========================================\n")
+    
+    current_theme, current_size = get_current_cursor()
+    print(f"Current Active Theme: {current_theme} ({current_size}px)")
+    print(f"Scanning directory: {PICTURES_CURSOR_DIR}\n")
+    
+    themes = scan_cursor_themes()
+    theme_names = sorted(list(themes.keys()))
+    
+    if not theme_names:
+        print("❌ No cursor themes found!")
+        print("Please place cursor theme folders or archives in ~/Pictures/cursor.")
+        return
+
+    for idx, name in enumerate(theme_names, 1):
+        info = themes[name]
+        is_active = " (Active)" if name == current_theme else ""
+        print(f" {idx:2d}. {name:<30} [{info['source']}]{is_active}")
+
+    print("\nSelect cursor theme number (or 'q' to quit): ", end="")
+    choice = input().strip()
+    
+    if choice.isdigit():
+        choice_idx = int(choice) - 1
+        if 0 <= choice_idx < len(theme_names):
+            target_name = theme_names[choice_idx]
+            apply_cursor_theme(target_name, themes[target_name])
+            print(f"\n✅ Successfully applied cursor theme: {target_name}!")
+        else:
+            print("\n❌ Invalid choice.")
+
+def main():
+    parser = argparse.ArgumentParser(description="mycursor - Automatic Cursor Switcher")
+    parser.add_argument("-l", "--list", action="store_true", help="List available cursor themes")
+    parser.add_argument("-s", "--set", type=str, metavar="THEME", help="Set cursor theme directly by name")
+    parser.add_argument("--size", type=int, default=24, help="Specify cursor size (default: 24)")
+    args = parser.parse_args()
+
+    if args.list:
+        themes = scan_cursor_themes()
+        cur_t, cur_s = get_current_cursor()
+        print(f"Active Theme: {cur_t} ({cur_s}px)\n")
+        print("Available Cursor Themes:")
+        for name, info in sorted(themes.items()):
+            active = " *" if name == cur_t else ""
+            print(f" - {name:<30} [{info['source']}] {active}")
+        return
+
+    if args.set:
+        themes = scan_cursor_themes()
+        if args.set in themes:
+            apply_cursor_theme(args.set, themes[args.set], size=args.size)
+            print(f"✅ Cursor theme set to '{args.set}' ({args.size}px).")
+        else:
+            apply_cursor_theme(args.set, None, size=args.size)
+            print(f"⚠️ Cursor theme '{args.set}' applied.")
+        return
+
+    if sys.stdout.isatty():
+        try:
+            import curses
+            curses.wrapper(run_curses_ui)
+        except Exception:
+            run_cli_fallback_menu()
+    else:
+        run_cli_fallback_menu()
+
+if __name__ == "__main__":
+    main()

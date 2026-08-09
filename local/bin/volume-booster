@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Volume Booster Script (Up to 150% Overdrive via WirePlumber / PulseAudio)
+
+ACTION="$1"
+
+get_current_vol() {
+    vol_str=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '{print $2}')
+    if [ -z "$vol_str" ]; then vol_str="0.5"; fi
+    python3 -c "print(int(float('$vol_str') * 100))"
+}
+
+set_vol() {
+    target=$1
+    if [ "$target" -gt 150 ]; then target=150; fi
+    if [ "$target" -lt 0 ]; then target=0; fi
+
+    target_decimal=$(python3 -c "print($target / 100.0)")
+    wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ "$target_decimal"
+
+    status="BOOSTED 🔊"
+    if [ "$target" -gt 100 ]; then
+        status="OVERDRIVE 🚀 (150% MAX)"
+    fi
+
+    notify-send -h "int:value:$target" -h "string:synchronous:volume" "Volume: ${target}% [$status]" -t 1500
+}
+
+curr=$(get_current_vol)
+
+case "$ACTION" in
+    "+5"|"+10"|"+15"|"+20")
+        inc=${ACTION#+}
+        set_vol $((curr + inc))
+        ;;
+    "-5"|"-10"|"-15"|"-20")
+        dec=${ACTION#-}
+        set_vol $((curr - dec))
+        ;;
+    "mute")
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        notify-send "Audio Mute Toggled" -t 1500
+        ;;
+    *)
+        if [[ "$ACTION" =~ ^[0-9]+$ ]]; then
+            set_vol "$ACTION"
+        else
+            echo "Usage: volume-booster [+5|-5|100|150|mute]"
+        fi
+        ;;
+esac

@@ -1,0 +1,20 @@
+#!/bin/bash
+STATUS_FILE="/tmp/gaming_mode_active"
+
+if [ -f "$STATUS_FILE" ]; then
+    rm -f "$STATUS_FILE"
+    if command -v powerprofilesctl >/dev/null 2>&1; then
+        powerprofilesctl set balanced 2>/dev/null || true
+    fi
+    hyprctl keyword animations:enabled 1 >/dev/null 2>&1 || true
+    hyprctl keyword decoration:blur:enabled 1 >/dev/null 2>&1 || true
+    notify-send -u normal -i controller "🎮 GAME MODE DEACTIVATED" "Restored Normal Clocks & Desktop Animations."
+else
+    touch "$STATUS_FILE"
+    if command -v powerprofilesctl >/dev/null 2>&1; then
+        powerprofilesctl set performance 2>/dev/null || true
+    fi
+    hyprctl keyword animations:enabled 0 >/dev/null 2>&1 || true
+    hyprctl keyword decoration:blur:enabled 0 >/dev/null 2>&1 || true
+    notify-send -u critical -i controller "🎮 GAME MODE ACTIVATED (+OVERCLOCK)" "🚀 GPU Power: Max 60W | Performance Governor\n⚡ Hyprland Blur & Animations: OFF"
+fi
