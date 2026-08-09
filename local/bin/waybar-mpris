@@ -22,7 +22,6 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
 
     cover_file="/tmp/mpris_cover_icon.png"
 
-    # Download & resize actual album cover art to mini 20x20px icon
     if [ -n "$art_url" ]; then
         if [[ "$art_url" == file://* ]]; then
             raw_path="${art_url#file://}"
@@ -37,9 +36,9 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
     track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g')
 
     if [ -f "$cover_file" ]; then
-        echo "{\"text\": \"  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
+        echo "{\"text\": \"<img src='${cover_file}' width='16' height='16'/>  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
     else
-        echo "{\"text\": \"🖼️ ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
+        echo "{\"text\": \"🎵  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
     fi
 else
     echo "{\"text\": \"\", \"class\": \"stopped\"}"
