@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Volume Booster Script (Up to 150% Overdrive via WirePlumber / PulseAudio)
+# High-Performance Audio Volume Booster (Up to 200% Overdrive via WirePlumber/Pactl)
 
 ACTION="$1"
 
@@ -11,15 +11,15 @@ get_current_vol() {
 
 set_vol() {
     target=$1
-    if [ "$target" -gt 150 ]; then target=150; fi
+    if [ "$target" -gt 200 ]; then target=200; fi
     if [ "$target" -lt 0 ]; then target=0; fi
 
     target_decimal=$(python3 -c "print($target / 100.0)")
-    wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ "$target_decimal"
+    wpctl set-volume -l 2.0 @DEFAULT_AUDIO_SINK@ "$target_decimal" 2>/dev/null || pactl set-sink-volume @DEFAULT_SINK@ "${target}%" 2>/dev/null
 
-    status="BOOSTED 🔊"
+    status="NORMAL"
     if [ "$target" -gt 100 ]; then
-        status="OVERDRIVE 🚀 (150% MAX)"
+        status="OVERDRIVE 🚀 (200% MAX)"
     fi
 
     notify-send -h "int:value:$target" -h "string:synchronous:volume" "Volume: ${target}% [$status]" -t 1500
@@ -37,14 +37,14 @@ case "$ACTION" in
         set_vol $((curr - dec))
         ;;
     "mute")
-        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || pactl set-sink-mute @DEFAULT_SINK@ toggle
         notify-send "Audio Mute Toggled" -t 1500
         ;;
     *)
         if [[ "$ACTION" =~ ^[0-9]+$ ]]; then
             set_vol "$ACTION"
         else
-            echo "Usage: volume-booster [+5|-5|100|150|mute]"
+            echo "Usage: volume-booster [+5|-5|100|150|200|mute]"
         fi
         ;;
 esac
