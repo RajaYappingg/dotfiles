@@ -20,8 +20,8 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
         play_icon="󰐊"
     fi
 
-    # Format: [Icon Album] Judul \n Artis | Controls
-    text="󰓇  <b>${title}</b>  <small>(${artist})</small>   󰒮  ${play_icon}  xd"
+    # Clean Spotify Widget: [Logo] Title (Artist)  |  Prev  Play/Pause  Next
+    text="   <b>${title}</b> <small>(${artist})</small>   󰒮  ${play_icon}  󰒍"
     track_escaped=$(echo "${artist} - ${title}" | sed 's/"/\\"/g' | sed 's/&/\&amp;/g')
 
     echo "{\"text\": \"${text}\", \"tooltip\": \"Spotify Player: ${status}\nTrack: ${track_escaped}\nKlik Kiri: Play/Pause | Klik Tengah: Prev | Klik Kanan: Next\", \"class\": \"${status,,}\"}"
