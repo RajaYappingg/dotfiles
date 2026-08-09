@@ -160,3 +160,23 @@ window#waybar {
     background-color: transparent;
     box-shadow: none;
 }
+
+#mpris {
+    background-color: @bg_pill;
+    color: @primary;
+    border: 1px solid @primary;
+    border-radius: 9999px;
+    padding: 3px 12px;
+    margin: 1px 3px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+#mpris.playing {
+    color: #a6e3a1;
+    border-color: #a6e3a1;
+}
+
+#mpris.paused {
+    color: #f9e2af;
+    border-color: #f9e2af;
+}

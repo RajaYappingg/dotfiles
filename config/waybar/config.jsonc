@@ -10,7 +10,7 @@
 
     "modules-left": [
         "hyprland/workspaces",
-        "custom/mpris"
+        "mpris"
     ],
     "modules-center": [
         "clock"
@@ -34,20 +34,16 @@
         "on-click": "activate"
     },
 
-    "custom/mpris": {
-        "exec": "/home/zaki/.local/bin/waybar-mpris",
-        "return-type": "json",
-        "interval": 2,
-        "format": "{}",
-        "on-click": "playerctl play-pause",
-        "on-scroll-up": "playerctl next",
-        "on-scroll-down": "playerctl previous"
-    },
-
-    "hyprland/window": {
-        "format": "{}",
-        "max-length": 25,
-        "separate-outputs": true
+    "mpris": {
+        "format": "{player_icon}  {artist} - {title}",
+        "format-paused": "{status_icon}  {artist} - {title}",
+        "player-icons": {
+            "default": "󰎈"
+        },
+        "status-icons": {
+            "paused": "󰏤"
+        },
+        "max-length": 30
     },
 
     "clock": {
