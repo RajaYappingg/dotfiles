@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# MPRIS Album Cover Image Generator for Waybar
+# Clean Audio Poller for Waybar
 
 status=$(playerctl status 2>/dev/null)
 
 if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
     artist=$(playerctl metadata xesam:artist 2>/dev/null)
     title=$(playerctl metadata xesam:title 2>/dev/null)
-    art_url=$(playerctl metadata mpris:artUrl 2>/dev/null)
 
     if [ -z "$title" ]; then title="Playing Audio"; fi
 
@@ -16,30 +15,13 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
         track_str="${title}"
     fi
 
-    if [ ${#track_str} -gt 24 ]; then
-        track_str="${track_str:0:21}..."
+    if [ ${#track_str} -gt 26 ]; then
+        track_str="${track_str:0:23}..."
     fi
 
-    cover_file="/tmp/mpris_cover_icon.png"
+    track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g' | sed 's/&/\&amp;/g')
 
-    if [ -n "$art_url" ]; then
-        if [[ "$art_url" == file://* ]]; then
-            raw_path="${art_url#file://}"
-            convert "$raw_path" -resize 20x20 "$cover_file" 2>/dev/null || cp "$raw_path" "$cover_file" 2>/dev/null
-        elif [[ "$art_url" == http://* ]] || [[ "$art_url" == https://* ]]; then
-            tmp_download="/tmp/raw_cover.jpg"
-            curl -s "$art_url" -o "$tmp_download" 2>/dev/null
-            convert "$tmp_download" -resize 20x20 "$cover_file" 2>/dev/null || true
-        fi
-    fi
-
-    track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g')
-
-    if [ -f "$cover_file" ]; then
-        echo "{\"text\": \"<img src='${cover_file}' width='16' height='16'/>  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
-    else
-        echo "{\"text\": \"🎵  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
-    fi
+    echo "{\"text\": \"🎵  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
 else
     echo "{\"text\": \"\", \"class\": \"stopped\"}"
 fi
