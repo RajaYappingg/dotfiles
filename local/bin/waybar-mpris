@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Audio Player Status Poller for Waybar
+# Audio Player Status Poller with Mini Album Cover Art for Waybar
 
 status=$(playerctl status 2>/dev/null)
 
 if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
     artist=$(playerctl metadata xesam:artist 2>/dev/null)
     title=$(playerctl metadata xesam:title 2>/dev/null)
+    art_url=$(playerctl metadata mpris:artUrl 2>/dev/null)
 
     if [ -z "$title" ]; then
         title="Playing Audio"
@@ -17,19 +18,36 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
         track_str="${title}"
     fi
 
-    if [ ${#track_str} -gt 28 ]; then
-        track_str="${track_str:0:25}..."
+    if [ ${#track_str} -gt 24 ]; then
+        track_str="${track_str:0:22}..."
     fi
 
-    icon="󰎈"
+    icon="🎵"
     if [ "$status" = "Playing" ]; then
-        icon="󰎈 󰏤"
+        icon="▶️"
     else
-        icon="󰏤"
+        icon="⏸️"
+    fi
+
+    # Handle Local or HTTP Album Cover Art URL
+    img_path=""
+    if [ -n "$art_url" ]; then
+        if [[ "$art_url" == file://* ]]; then
+            img_path="${art_url#file://}"
+        elif [[ "$art_url" == http://* ]] || [[ "$art_url" == https://* ]]; then
+            cache_img="/tmp/.mpris_cover.png"
+            curl -s "$art_url" -o "$cache_img" 2>/dev/null &
+            img_path="$cache_img"
+        fi
     fi
 
     track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g')
-    echo "{\"text\": \"${icon} ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
+
+    if [ -n "$img_path" ] && [ -f "$img_path" ]; then
+        echo "{\"text\": \"${icon} ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\", \"image-path\": \"${img_path}\"}"
+    else
+        echo "{\"text\": \"${icon} ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
+    fi
 else
-    echo "{\"text\": \"󰎈 No Audio\", \"tooltip\": \"No active media player\", \"class\": \"stopped\"}"
+    echo "{\"text\": \"🎵 No Audio\", \"tooltip\": \"No active media player\", \"class\": \"stopped\"}"
 fi
