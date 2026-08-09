@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spotify Style Rectangular Widget Poller for Waybar
+# Spotify Style Rectangular Widget Poller with Large Control Buttons
 
 status=$(playerctl status 2>/dev/null)
 
@@ -13,15 +13,15 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
     if [ ${#title} -gt 18 ]; then title="${title:0:16}.."; fi
     if [ ${#artist} -gt 20 ]; then artist="${artist:0:18}.."; fi
 
-    play_icon="⏸"
+    play_icon="<span size='large'>⏸</span>"
     if [ "$status" = "Playing" ]; then
-        play_icon="⏸"
+        play_icon="<span size='large'>⏸</span>"
     else
-        play_icon="▶"
+        play_icon="<span size='large'>▶</span>"
     fi
 
-    # Clean Spotify Widget: [Logo] Title (Artist)  |  ⏮  Play/Pause  ⏭
-    text="   <b>${title}</b> <small>(${artist})</small>   ⏮  ${play_icon}  ⏭"
+    # Clean Spotify Widget: [Logo] Title (Artist)  |  <big>⏮  ⏸  ⏭</big>
+    text="   <b>${title}</b> <small>(${artist})</small>     <span size='large'>⏮</span>   ${play_icon}   <span size='large'>⏭</span>"
     track_escaped=$(echo "${artist} - ${title}" | sed 's/"/\\"/g' | sed 's/&/\&amp;/g')
 
     echo "{\"text\": \"${text}\", \"tooltip\": \"Spotify Player: ${status}\nTrack: ${track_escaped}\nKlik Kiri: Play/Pause | Klik Tengah: Prev | Klik Kanan: Next\", \"class\": \"${status,,}\"}"

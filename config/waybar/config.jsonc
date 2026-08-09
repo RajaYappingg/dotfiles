@@ -2,7 +2,7 @@
     "layer": "top",
     "position": "top",
     "output": ["*"],
-    "height": 36,
+    "height": 38,
     "spacing": 4,
     "margin-top": 5,
     "margin-left": 10,
@@ -38,6 +38,7 @@
         "return-type": "json",
         "interval": 1,
         "format": "{}",
+        "escape": false,
         "on-click": "playerctl play-pause",
         "on-click-middle": "playerctl previous",
         "on-click-right": "playerctl next"
