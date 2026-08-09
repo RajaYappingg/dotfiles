@@ -23,8 +23,7 @@
         "network",
         "pulseaudio",
         "battery",
-        "custom/notification",
-        "tray"
+        "custom/notification"
     ],
 
     "hyprland/workspaces": {
@@ -137,11 +136,5 @@
         "on-click": "/home/zaki/.local/bin/waybar-notification pop",
         "on-click-right": "/home/zaki/.local/bin/waybar-notification clear",
         "on-click-middle": "/home/zaki/.local/bin/waybar-notification dnd"
-    },
-
-    "tray": {
-        "icon-size": 13,
-        "spacing": 8,
-        "show-passive-items": false
     }
 }
