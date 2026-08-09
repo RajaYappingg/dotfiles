@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clean Audio Poller for Waybar
+# Spotify Style Rectangular Widget Poller for Waybar
 
 status=$(playerctl status 2>/dev/null)
 
@@ -7,21 +7,24 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
     artist=$(playerctl metadata xesam:artist 2>/dev/null)
     title=$(playerctl metadata xesam:title 2>/dev/null)
 
-    if [ -z "$title" ]; then title="Playing Audio"; fi
+    if [ -z "$title" ]; then title="Calling My Phone"; fi
+    if [ -z "$artist" ]; then artist="Unknown Artist"; fi
 
-    if [ -n "$artist" ]; then
-        track_str="${artist} - ${title}"
+    if [ ${#title} -gt 18 ]; then title="${title:0:16}.."; fi
+    if [ ${#artist} -gt 20 ]; then artist="${artist:0:18}.."; fi
+
+    play_icon="󰏤"
+    if [ "$status" = "Playing" ]; then
+        play_icon="󰏤"
     else
-        track_str="${title}"
+        play_icon="󰐊"
     fi
 
-    if [ ${#track_str} -gt 26 ]; then
-        track_str="${track_str:0:23}..."
-    fi
+    # Format: [Icon Album] Judul \n Artis | Controls
+    text="󰓇  <b>${title}</b>  <small>(${artist})</small>   󰒮  ${play_icon}  xd"
+    track_escaped=$(echo "${artist} - ${title}" | sed 's/"/\\"/g' | sed 's/&/\&amp;/g')
 
-    track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g' | sed 's/&/\&amp;/g')
-
-    echo "{\"text\": \"🎵  ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
+    echo "{\"text\": \"${text}\", \"tooltip\": \"Spotify Player: ${status}\nTrack: ${track_escaped}\nKlik Kiri: Play/Pause | Klik Tengah: Prev | Klik Kanan: Next\", \"class\": \"${status,,}\"}"
 else
     echo "{\"text\": \"\", \"class\": \"stopped\"}"
 fi

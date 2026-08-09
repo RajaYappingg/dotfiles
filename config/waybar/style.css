@@ -180,3 +180,23 @@ window#waybar {
     color: #f9e2af;
     border-color: #f9e2af;
 }
+
+#custom-spotify-widget {
+    background-color: #121212;
+    color: #ffffff;
+    border: 1px solid #282828;
+    border-radius: 6px;
+    padding: 2px 14px;
+    margin: 1px 6px;
+    font-size: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+
+#custom-spotify-widget.playing {
+    border-color: #1db954;
+}
+
+#custom-spotify-widget.paused {
+    border-color: #535353;
+    color: #b3b3b3;
+}

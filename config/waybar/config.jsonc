@@ -10,7 +10,7 @@
 
     "modules-left": [
         "hyprland/workspaces",
-        "custom/mpris"
+        "custom/spotify-widget"
     ],
     "modules-center": [
         "clock"
@@ -33,14 +33,14 @@
         "on-click": "activate"
     },
 
-    "custom/mpris": {
+    "custom/spotify-widget": {
         "exec": "/home/zaki/.local/bin/waybar-mpris",
         "return-type": "json",
-        "interval": 2,
+        "interval": 1,
         "format": "{}",
         "on-click": "playerctl play-pause",
-        "on-scroll-up": "playerctl next",
-        "on-scroll-down": "playerctl previous"
+        "on-click-middle": "playerctl previous",
+        "on-click-right": "playerctl next"
     },
 
     "clock": {
