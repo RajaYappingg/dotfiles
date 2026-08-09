@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Waybar MPRIS Audio Player Module
+# Audio Player Status Poller for Waybar
 
 status=$(playerctl status 2>/dev/null)
 
@@ -17,9 +17,8 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
         track_str="${title}"
     fi
 
-    # Truncate text if too long for waybar pill
-    if [ ${#track_str} -gt 32 ]; then
-        track_str="${track_str:0:29}..."
+    if [ ${#track_str} -gt 28 ]; then
+        track_str="${track_str:0:25}..."
     fi
 
     icon="󰎈"
@@ -29,10 +28,8 @@ if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
         icon="󰏤"
     fi
 
-    # Escape JSON special chars
     track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g')
-    
-    echo "{\"text\": \"${icon} ${track_str_escaped}\", \"tooltip\": \"Media Player: ${status}\nTrack: ${track_str_escaped}\nKlik Kiri: Play/Pause | Scroll: Next/Prev\", \"class\": \"${status,,}\"}"
+    echo "{\"text\": \"${icon} ${track_str_escaped}\", \"tooltip\": \"Status: ${status}\n${track_str_escaped}\", \"class\": \"${status,,}\"}"
 else
-    echo "{\"text\": \"\", \"class\": \"stopped\"}"
+    echo "{\"text\": \"󰎈 No Audio\", \"tooltip\": \"No active media player\", \"class\": \"stopped\"}"
 fi
