@@ -129,3 +129,32 @@ window#waybar {
     border-color: @primary;
     padding: 3px 16px;
 }
+
+#custom-mpris {
+    background-color: @bg_pill;
+    color: @primary;
+    border: 1px solid @primary;
+    border-radius: 9999px;
+    padding: 3px 12px;
+    margin: 1px 3px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+#custom-mpris.playing {
+    color: #a6e3a1;
+    border-color: #a6e3a1;
+}
+
+#custom-mpris.paused {
+    color: #f9e2af;
+    border-color: #f9e2af;
+}
+
+#custom-mpris.stopped {
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    border: none;
+    background-color: transparent;
+    box-shadow: none;
+}

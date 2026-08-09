@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Waybar MPRIS Audio Player Module
+
+status=$(playerctl status 2>/dev/null)
+
+if [ "$status" = "Playing" ] || [ "$status" = "Paused" ]; then
+    artist=$(playerctl metadata xesam:artist 2>/dev/null)
+    title=$(playerctl metadata xesam:title 2>/dev/null)
+
+    if [ -z "$title" ]; then
+        title="Playing Audio"
+    fi
+
+    if [ -n "$artist" ]; then
+        track_str="${artist} - ${title}"
+    else
+        track_str="${title}"
+    fi
+
+    # Truncate text if too long for waybar pill
+    if [ ${#track_str} -gt 32 ]; then
+        track_str="${track_str:0:29}..."
+    fi
+
+    icon="󰎈"
+    if [ "$status" = "Playing" ]; then
+        icon="󰎈 󰏤"
+    else
+        icon="󰏤"
+    fi
+
+    # Escape JSON special chars
+    track_str_escaped=$(echo "$track_str" | sed 's/"/\\"/g')
+    
+    echo "{\"text\": \"${icon} ${track_str_escaped}\", \"tooltip\": \"Media Player: ${status}\nTrack: ${track_str_escaped}\nKlik Kiri: Play/Pause | Scroll: Next/Prev\", \"class\": \"${status,,}\"}"
+else
+    echo "{\"text\": \"\", \"class\": \"stopped\"}"
+fi

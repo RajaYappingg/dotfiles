@@ -9,7 +9,8 @@
     "margin-right": 10,
 
     "modules-left": [
-        "hyprland/workspaces"
+        "hyprland/workspaces",
+        "custom/mpris"
     ],
     "modules-center": [
         "clock"
@@ -31,6 +32,16 @@
         "all-outputs": true,
         "format": "{name}",
         "on-click": "activate"
+    },
+
+    "custom/mpris": {
+        "exec": "/home/zaki/.local/bin/waybar-mpris",
+        "return-type": "json",
+        "interval": 2,
+        "format": "{}",
+        "on-click": "playerctl play-pause",
+        "on-scroll-up": "playerctl next",
+        "on-scroll-down": "playerctl previous"
     },
 
     "hyprland/window": {
