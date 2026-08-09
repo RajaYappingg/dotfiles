@@ -38,7 +38,9 @@
         "format": "{player_icon}  {artist} - {title}",
         "format-paused": "{status_icon}  {artist} - {title}",
         "player-icons": {
-            "default": "󰎈"
+            "default": "󰎈",
+            "firefox": "󰈹",
+            "spotify": ""
         },
         "status-icons": {
             "paused": "󰏤"
@@ -139,6 +141,7 @@
 
     "tray": {
         "icon-size": 13,
-        "spacing": 8
+        "spacing": 8,
+        "show-passive-items": false
     }
 }
