@@ -1,11 +1,11 @@
-/* Dynamic Rounded Pills Waybar Style (Slightly Larger UI) */
+/* Dynamic Rounded Pills Waybar Style (Clean Aesthetic UI) */
 @import "colors.css";
 
 * {
     border: none;
     border-radius: 0;
     font-family: "Inter", "FiraCode Nerd Font", sans-serif;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 600;
     min-height: 0;
 }
@@ -33,14 +33,14 @@ window#waybar {
     color: @text_main;
     border: 1px solid @primary;
     border-radius: 9999px;
-    padding: 4px 14px;
+    padding: 3px 14px;
     margin: 1px 4px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 #network,
 #pulseaudio {
-    padding: 4px 12px;
+    padding: 3px 12px;
 }
 
 #battery.full:not(.discharging),
@@ -70,7 +70,7 @@ window#waybar {
     background-color: @bg_pill;
     border: 1px solid @primary;
     border-radius: 9999px;
-    padding: 4px 8px;
+    padding: 3px 8px;
     margin: 1px 4px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
@@ -81,12 +81,12 @@ window#waybar {
     color: rgba(255, 255, 255, 0.45);
     border: none;
     border-radius: 8px;
-    min-width: 28px;
-    min-height: 28px;
+    min-width: 26px;
+    min-height: 26px;
     padding: 0;
     margin: 0 3px;
     font-weight: 600;
-    font-size: 13.5px;
+    font-size: 13px;
     transition: all 0.2s ease;
 }
 
@@ -114,18 +114,18 @@ window#waybar {
     font-weight: 700;
     color: #ffffff;
     border-color: @primary;
-    padding: 4px 18px;
+    padding: 3px 18px;
 }
 
 #custom-spotify-widget {
     background-color: #121212;
     color: #ffffff;
     border: 1px solid #282828;
-    border-radius: 8px;
-    padding: 4px 16px;
+    border-radius: 9999px;
+    padding: 3px 16px;
     margin: 1px 6px;
-    font-size: 13.5px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    font-size: 13px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
 }
 
 #custom-spotify-widget.playing {
